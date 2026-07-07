@@ -88,10 +88,11 @@ enum KeychainError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unhandledStatus(let status):
+            let statusText = String(status)
             if let message = SecCopyErrorMessageString(status, nil) as String? {
-                return "Keychain 操作失敗（\(status)）：\(message)"
+                return L10n.string("Keychain 操作失敗（%@）：%@", statusText, message)
             }
-            return "Keychain 操作失敗（錯誤代碼 \(status)）"
+            return L10n.string("Keychain 操作失敗（錯誤代碼 %@）", statusText)
         }
     }
 }

@@ -143,7 +143,7 @@ struct ExplainSheet: View {
         defer { isLoading = false }
 
         guard let provider = ProviderFactory.resolve() else {
-            errorMessage = "未設定 API key，去 Settings 設定先用得解釋功能"
+            errorMessage = L10n.string("未設定 API key，去 Settings 設定先用得解釋功能")
             return
         }
 

@@ -8,9 +8,10 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @AppStorage(SettingsKeys.targetLanguage) private var targetLanguage: String = "繁體中文"
-    @AppStorage(SettingsKeys.homeCurrency) private var homeCurrency: String = "HKD"
+    @AppStorage(SettingsKeys.homeCurrency) private var homeCurrency: String = "USD"
     @AppStorage(SettingsKeys.geminiModel) private var geminiModel: String = "gemini-2.5-flash"
     @AppStorage(SettingsKeys.useMockProvider) private var useMockProvider: Bool = false
+    @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw: String = "system"
 
     @State private var apiKeyInput: String = ""
     @State private var hasStoredKey: Bool = false
@@ -22,7 +23,7 @@ struct SettingsView: View {
 
     private let keychainStore = KeychainStore()
     private let fxService = FXService()
-    private let commonCurrencies = ["HKD", "TWD", "USD", "JPY", "EUR", "GBP", "CNY"]
+    private let commonCurrencies = ["USD", "HKD", "TWD", "JPY", "EUR", "GBP", "CNY"]
 
     private var appVersionString: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
@@ -30,6 +31,16 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("語言", selection: $appLanguageRaw) {
+                    ForEach(AppLanguage.allCases) { language in
+                        languageLabel(for: language).tag(language.rawValue)
+                    }
+                }
+            } header: {
+                Text("語言")
+            }
+
             Section {
                 SecureField("Gemini API Key", text: $apiKeyInput)
                 if hasStoredKey {
@@ -137,6 +148,18 @@ struct SettingsView: View {
         }
         .navigationTitle("設定")
         .onAppear(perform: refreshKeyState)
+    }
+
+    @ViewBuilder
+    private func languageLabel(for language: AppLanguage) -> some View {
+        switch language {
+        case .system:
+            Text("跟隨系統")
+        case .zhHant:
+            Text(verbatim: "繁體中文")
+        case .english:
+            Text(verbatim: "English")
+        }
     }
 
     private func refreshKeyState() {

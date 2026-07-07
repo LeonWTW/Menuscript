@@ -73,7 +73,7 @@ final class CaptureViewModel {
 
         let defaults = UserDefaults.standard
         let targetLanguage = defaults.string(forKey: SettingsKeys.targetLanguage) ?? "繁體中文"
-        let homeCurrency = defaults.string(forKey: SettingsKeys.homeCurrency) ?? "HKD"
+        let homeCurrency = defaults.string(forKey: SettingsKeys.homeCurrency) ?? "USD"
 
         let provider: MenuVisionProvider
         if let injectedProvider {

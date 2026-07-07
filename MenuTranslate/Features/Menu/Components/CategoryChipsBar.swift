@@ -9,7 +9,7 @@ struct CategoryChipsBar: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    private let allLabel = "全部"
+    private let allLabel = L10n.string("全部")
     private let allID = "__mt_category_all__"
 
     var body: some View {

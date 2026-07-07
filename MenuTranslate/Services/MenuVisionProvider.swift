@@ -27,19 +27,19 @@ enum VisionProviderError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "未設定 API Key，請先喺設定入面填返 Gemini API Key。"
+            return L10n.string("未設定 API Key，請先喺設定入面填返 Gemini API Key。")
         case .invalidImage:
-            return "呢張相讀取唔到，請重新影過或者揀第二張。"
+            return L10n.string("呢張相讀取唔到，請重新影過或者揀第二張。")
         case .http(let code):
-            return "伺服器回應錯誤（HTTP \(code)），請遲啲再試。"
+            return L10n.string("伺服器回應錯誤（HTTP %lld），請遲啲再試。", code)
         case .rateLimited:
-            return "請求太密，已達到 API 用量上限，請等一陣再試。"
+            return L10n.string("請求太密，已達到 API 用量上限，請等一陣再試。")
         case .emptyMenu:
-            return "喺相入面搵唔到菜單項目，請影清楚啲再試一次。"
+            return L10n.string("喺相入面搵唔到菜單項目，請影清楚啲再試一次。")
         case .decodeFailed(let detail):
-            return "菜單辨識結果解析失敗，請再試一次。（\(detail)）"
+            return L10n.string("菜單辨識結果解析失敗，請再試一次。（%@）", detail)
         case .network(let detail):
-            return "網絡連線失敗，請檢查網絡之後再試。（\(detail)）"
+            return L10n.string("網絡連線失敗，請檢查網絡之後再試。（%@）", detail)
         }
     }
 }

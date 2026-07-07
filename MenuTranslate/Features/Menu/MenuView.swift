@@ -64,7 +64,7 @@ struct MenuView: View {
             }
         }
         .background { Color.mtBackground.ignoresSafeArea() }
-        .navigationTitle(session.title ?? "菜單")
+        .navigationTitle(session.title ?? L10n.string("菜單"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.mtBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -156,7 +156,7 @@ struct MenuView: View {
             detectedLanguage: "日文",
             targetLanguage: "繁體中文",
             menuCurrency: "JPY",
-            homeCurrency: "HKD"
+            homeCurrency: "USD"
         ))
     }
 }

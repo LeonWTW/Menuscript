@@ -116,7 +116,7 @@ struct GeminiProvider: MenuVisionProvider {
 
     private func makeRequest(body: [String: Any], key: String) throws -> URLRequest {
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent") else {
-            throw VisionProviderError.network("無效嘅 API endpoint（model: \(model)）")
+            throw VisionProviderError.network(L10n.string("無效嘅 API endpoint（model: %@）", model))
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -395,7 +395,7 @@ struct GeminiProvider: MenuVisionProvider {
             throw VisionProviderError.network(String(describing: error))
         }
         guard let http = response as? HTTPURLResponse else {
-            throw VisionProviderError.network("非 HTTP 回應")
+            throw VisionProviderError.network(L10n.string("非 HTTP 回應"))
         }
         switch http.statusCode {
         case 200..<300:

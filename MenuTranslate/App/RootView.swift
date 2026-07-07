@@ -26,7 +26,7 @@ struct RootView: View {
                     historyList
                 }
             }
-            .navigationTitle("菜單")
+            .navigationTitle("菜單記錄")
             .navigationDestination(for: MenuSession.self) { session in
                 MenuView(session: session)
             }
@@ -135,6 +135,10 @@ struct RootView: View {
     @MainActor
     private func runAutoDemoIfNeeded() async {
         guard UserDefaults.standard.bool(forKey: "autoDemo"), navigationPath.isEmpty else { return }
+        if UserDefaults.standard.string(forKey: "autoDemoScreen") == "settings" {
+            showSettings = true
+            return
+        }
         let demoViewModel = CaptureViewModel(modelContext: modelContext)
         demoViewModel.addPhotos([Self.demoImage()])
         await demoViewModel.recognize()
@@ -164,10 +168,10 @@ private struct HistoryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(session.title ?? "未命名菜單")
+            Text(session.title ?? L10n.string("未命名菜單"))
                 .font(.headline)
                 .foregroundStyle(Color.mtTextPrimary)
-            Text(session.createdAt.formatted(.dateTime.month(.abbreviated).day().weekday(.wide)))
+            Text(session.createdAt, format: .dateTime.month(.abbreviated).day().weekday(.wide))
                 .font(.footnote)
                 .foregroundStyle(Color.mtTextSecondary)
             Text("\(session.items.count) 味菜 · \(session.detectedLanguage)")

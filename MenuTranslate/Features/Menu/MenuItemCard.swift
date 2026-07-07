@@ -108,7 +108,7 @@ struct MenuItemCard: View {
                         .foregroundStyle(Color.mtPriceConverted)
                 }
             } else {
-                Text(item.priceNote ?? "時價")
+                Text(item.priceNote ?? L10n.string("時價"))
                     .font(.mtDishName)
                     .foregroundStyle(Color.mtTextPrimary)
             }
@@ -117,20 +117,20 @@ struct MenuItemCard: View {
     }
 
     private var accessibilitySummary: String {
-        var text = "\(item.translatedName)，原文 \(item.originalName)"
+        var text = L10n.string("%@，原文 %@", item.translatedName, item.originalName)
         if let priceValue = item.priceValue {
             if let fxRate {
                 let converted = CurrencyFormat.format(BillMath.converted(priceValue, rate: fxRate), code: homeCurrency)
                 let original = CurrencyFormat.format(priceValue, code: menuCurrency)
-                text += "，約 \(converted)，原價 \(original)"
+                text += L10n.string("，約 %@，原價 %@", converted, original)
             } else {
-                text += "，\(CurrencyFormat.format(priceValue, code: menuCurrency))"
+                text += L10n.string("，%@", CurrencyFormat.format(priceValue, code: menuCurrency))
             }
         } else {
-            text += "，\(item.priceNote ?? "時價")"
+            text += L10n.string("，%@", item.priceNote ?? L10n.string("時價"))
         }
         if item.lowConfidence {
-            text += "，翻譯可能不準確"
+            text += L10n.string("，翻譯可能不準確")
         }
         return text
     }
@@ -166,7 +166,7 @@ struct MenuItemCard: View {
                     sortOrder: 0
                 ),
                 menuCurrency: "JPY",
-                homeCurrency: "HKD",
+                homeCurrency: "USD",
                 fxRate: 0.052,
                 onExplain: { _ in }
             )
@@ -179,7 +179,7 @@ struct MenuItemCard: View {
                     sortOrder: 1
                 ),
                 menuCurrency: "JPY",
-                homeCurrency: "HKD",
+                homeCurrency: "USD",
                 fxRate: 0.052,
                 onExplain: { _ in }
             )
@@ -193,7 +193,7 @@ struct MenuItemCard: View {
                     sortOrder: 2
                 ),
                 menuCurrency: "JPY",
-                homeCurrency: "HKD",
+                homeCurrency: "USD",
                 fxRate: nil,
                 onExplain: { _ in }
             )

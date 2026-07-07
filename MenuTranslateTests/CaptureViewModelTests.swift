@@ -86,7 +86,7 @@ struct CaptureViewModelTests {
         #expect(session.items.count == 10)
         #expect(session.title == "鷹の目")
         #expect(session.targetLanguage == "繁體中文")
-        #expect(session.homeCurrency == "HKD")
+        #expect(session.homeCurrency == "USD")
         #expect(session.items.allSatisfy { $0.quantity == 0 })
 
         let sortOrders = session.items.map(\.sortOrder).sorted()

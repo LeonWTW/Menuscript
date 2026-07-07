@@ -59,12 +59,18 @@ struct CartBar: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("已選 \(kindCount) 款共 \(totalQuantity) 件\(hasUnpriced ? "，部分未計時價" : "")，合共 \(totalConvertedText ?? totalOriginalText)")
+        .accessibilityLabel(L10n.string(
+            "已選 %lld 款共 %lld 件%@，合共 %@",
+            kindCount,
+            totalQuantity,
+            hasUnpriced ? L10n.string("，部分未計時價") : "",
+            totalConvertedText ?? totalOriginalText
+        ))
     }
 
     private var kindsAndCountText: String {
-        let base = "\(kindCount) 款 · \(totalQuantity) 件"
-        return hasUnpriced ? "\(base) · 未計時價" : base
+        let base = L10n.string("%lld 款 · %lld 件", kindCount, totalQuantity)
+        return hasUnpriced ? L10n.string("%@ · 未計時價", base) : base
     }
 
     private var checkoutButton: some View {

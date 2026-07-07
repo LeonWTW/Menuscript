@@ -119,7 +119,7 @@ struct BillView: View {
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtTextPrimary)
             } else {
-                Text(item.priceNote ?? "時價")
+                Text(item.priceNote ?? L10n.string("時價"))
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtTextSecondary)
             }
@@ -131,9 +131,9 @@ struct BillView: View {
     private func orderLineAccessibilityLabel(_ item: MenuItem) -> String {
         if let priceValue = item.priceValue {
             let lineTotal = CurrencyFormat.format(priceValue * Decimal(item.quantity), code: session.menuCurrency)
-            return "\(item.translatedName)，\(item.quantity) 件，小計 \(lineTotal)"
+            return L10n.string("%@，%lld 件，小計 %@", item.translatedName, item.quantity, lineTotal)
         }
-        return "\(item.translatedName)，\(item.quantity) 件，\(item.priceNote ?? "時價")，未計入總數"
+        return L10n.string("%@，%lld 件，%@，未計入總數", item.translatedName, item.quantity, item.priceNote ?? L10n.string("時價"))
     }
 
     // MARK: - Surcharge
@@ -255,12 +255,12 @@ struct BillView: View {
 
     private var fxStatusText: String {
         guard let fxRate = session.fxRate else {
-            return "攞唔到 \(session.menuCurrency)→\(session.homeCurrency) 匯率，可以喺設定入面手動輸入"
+            return L10n.string("攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入", session.menuCurrency, session.homeCurrency)
         }
         let rateText = String(format: "%.4f", fxRate)
         let dateText = session.fxRateDate.map { Self.fxDateFormatter.string(from: $0) }
-        let rateDescription = "匯率 1 \(session.menuCurrency) ≈ \(rateText) \(session.homeCurrency)"
-        return dateText.map { "\(rateDescription)（\($0)）" } ?? rateDescription
+        let rateDescription = L10n.string("匯率 1 %@ ≈ %@ %@", session.menuCurrency, rateText, session.homeCurrency)
+        return dateText.map { L10n.string("%@（%@）", rateDescription, $0) } ?? rateDescription
     }
 
     private var refreshRateButton: some View {
@@ -291,7 +291,7 @@ struct BillView: View {
         session.fxRateDate = fresh.date
     }
 
-    private func summaryRow(label: String, value: String) -> some View {
+    private func summaryRow(label: LocalizedStringKey, value: String) -> some View {
         HStack {
             Text(label)
                 .font(.footnote)
@@ -344,7 +344,7 @@ struct BillView: View {
         if let convertedTotal {
             let converted = CurrencyFormat.format(convertedTotal, code: session.homeCurrency)
             let original = CurrencyFormat.format(total, code: session.menuCurrency)
-            return "約 \(converted)，原幣 \(original)"
+            return L10n.string("約 %@，原幣 %@", converted, original)
         }
         return CurrencyFormat.format(total, code: session.menuCurrency)
     }
@@ -417,12 +417,12 @@ struct BillView: View {
         if let perPersonConverted {
             let converted = CurrencyFormat.format(perPersonConverted, code: session.homeCurrency)
             let original = CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency)
-            return "約 \(converted)，原幣 \(original)"
+            return L10n.string("約 %@，原幣 %@", converted, original)
         }
         return CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency)
     }
 
-    private func heroLabel(_ text: String) -> some View {
+    private func heroLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.mtDishName)
             .foregroundStyle(Color.mtTextPrimary)
@@ -530,7 +530,7 @@ private struct PeopleCountStepper: View {
         detectedLanguage: "日文",
         targetLanguage: "繁體中文",
         menuCurrency: "JPY",
-        homeCurrency: "HKD",
+        homeCurrency: "USD",
         fxRate: 0.052,
         peopleCount: 3,
         surchargePercent: 10
