@@ -1,38 +1,144 @@
+import Foundation
 import SwiftUI
 
-// MARK: WF-4 replaces this stub comment
+/// The Menu screen (WF-4): category-filtered dish list with a floating cart
+/// bar. Presentation only — screen data flows exclusively through
+/// `MenuLogic`; explain and checkout are temporary placeholders pending WF-5.
 struct MenuView: View {
     let session: MenuSession
 
-    private var sortedItems: [MenuItem] {
-        session.items.sorted { $0.sortOrder < $1.sortOrder }
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var selectedCategory: String?
+    @State private var explainItem: MenuItem?
+    @State private var showBill = false
+
+    private var categories: [String] {
+        MenuLogic.categories(items: session.items)
+    }
+
+    private var filteredItems: [MenuItem] {
+        MenuLogic.filtered(items: session.items, category: selectedCategory)
+    }
+
+    private var cartTotals: (kinds: Int, count: Int, subtotal: Decimal) {
+        MenuLogic.totals(items: session.items)
+    }
+
+    private var isCartVisible: Bool {
+        cartTotals.count > 0
+    }
+
+    private var originalSubtotalText: String {
+        CurrencyFormat.format(cartTotals.subtotal, code: session.menuCurrency)
+    }
+
+    private var convertedSubtotalText: String? {
+        guard let fxRate = session.fxRate else { return nil }
+        let converted = BillMath.converted(cartTotals.subtotal, rate: fxRate)
+        return CurrencyFormat.format(converted, code: session.homeCurrency)
+    }
+
+    private var hairlineColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.08)
     }
 
     var body: some View {
-        List(sortedItems, id: \.persistentModelID) { item in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(item.translatedName)
-                        .font(.headline)
-                    if item.lowConfidence {
-                        Text("⚠️")
-                    }
-                    Spacer()
-                    if let price = item.priceValue {
-                        Text(CurrencyFormat.format(price, code: session.menuCurrency))
-                            .font(.subheadline)
-                    } else if let priceNote = item.priceNote {
-                        Text(priceNote)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+        ScrollView {
+            if filteredItems.isEmpty {
+                emptyCategoryState
+            } else {
+                LazyVStack(spacing: MTSpacing.cardGap) {
+                    ForEach(filteredItems, id: \.persistentModelID) { item in
+                        MenuItemCard(
+                            item: item,
+                            menuCurrency: session.menuCurrency,
+                            homeCurrency: session.homeCurrency,
+                            fxRate: session.fxRate,
+                            onExplain: { explainItem = $0 }
+                        )
                     }
                 }
-                Text(item.originalName)
-                    .font(.subheadline)
+                .padding(.horizontal, MTSpacing.screenMargin)
+            }
+        }
+        .background { Color.mtBackground.ignoresSafeArea() }
+        .navigationTitle(session.title ?? "菜單")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.mtBackground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            CategoryChipsBar(categories: categories, selection: $selectedCategory)
+                .background(Color.mtBackground)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(hairlineColor)
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+                }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isCartVisible {
+                CartBar(
+                    kindCount: cartTotals.kinds,
+                    totalQuantity: cartTotals.count,
+                    totalOriginalText: originalSubtotalText,
+                    totalConvertedText: convertedSubtotalText,
+                    onCheckout: { showBill = true }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.default, value: isCartVisible)
+        .sheet(item: $explainItem) { item in
+            explainSheet(for: item)
+        }
+        .sheet(isPresented: $showBill) {
+            billSheet
+        }
+    }
+
+    private var emptyCategoryState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "fork.knife")
+                .font(.title2)
+                .foregroundStyle(Color.mtTextSecondary)
+            Text("此分類沒有菜式")
+                .font(.footnote)
+                .foregroundStyle(Color.mtTextSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func explainSheet(for item: MenuItem) -> some View {
+        // MARK: WF-5 replaces
+        VStack(spacing: 16) {
+            Text(item.translatedName)
+                .font(.headline)
+            ProgressView()
+            Text("解釋功能 WF-5 加入")
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+
+    private var billSheet: some View {
+        // MARK: WF-5 replaces
+        VStack(spacing: 16) {
+            Text("結帳 WF-5 加入")
+                .font(.headline)
+            Text(originalSubtotalText)
+                .font(.title3)
+            if let convertedSubtotalText {
+                Text(convertedSubtotalText)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(session.title ?? "菜單")
+        .padding()
     }
 }
 

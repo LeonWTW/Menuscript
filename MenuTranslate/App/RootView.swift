@@ -88,6 +88,9 @@ struct RootView: View {
         demoViewModel.addPhotos([Self.demoImage()])
         await demoViewModel.recognize()
         if let session = demoViewModel.completedSession {
+            let sortedItems = session.items.sorted { $0.sortOrder < $1.sortOrder }
+            if sortedItems.indices.contains(0) { sortedItems[0].quantity = 1 }
+            if sortedItems.indices.contains(1) { sortedItems[1].quantity = 2 }
             navigationPath.append(session)
         }
     }
