@@ -22,7 +22,7 @@ struct MenuView: View {
         MenuLogic.filtered(items: session.items, category: selectedCategory)
     }
 
-    private var cartTotals: (kinds: Int, count: Int, subtotal: Decimal) {
+    private var cartTotals: (kinds: Int, count: Int, subtotal: Decimal, hasUnpriced: Bool) {
         MenuLogic.totals(items: session.items)
     }
 
@@ -37,7 +37,7 @@ struct MenuView: View {
     private var convertedSubtotalText: String? {
         guard let fxRate = session.fxRate else { return nil }
         let converted = BillMath.converted(cartTotals.subtotal, rate: fxRate)
-        return CurrencyFormat.format(converted, code: session.homeCurrency)
+        return "≈ " + CurrencyFormat.format(converted, code: session.homeCurrency)
     }
 
     private var hairlineColor: Color {
@@ -85,6 +85,7 @@ struct MenuView: View {
                     totalQuantity: cartTotals.count,
                     totalOriginalText: originalSubtotalText,
                     totalConvertedText: convertedSubtotalText,
+                    hasUnpriced: cartTotals.hasUnpriced,
                     onCheckout: { showBill = true }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))

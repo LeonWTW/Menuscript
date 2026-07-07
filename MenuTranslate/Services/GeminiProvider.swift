@@ -17,7 +17,9 @@ struct GeminiProvider: MenuVisionProvider {
         session: URLSession = .shared
     ) {
         self.apiKey = apiKey
-        self.model = model
+        // A trailing/leading space typed into Settings' free-text model field
+        // would otherwise land in the URL path and break the request invisibly.
+        self.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
         self.session = session
     }
 
@@ -242,7 +244,7 @@ struct GeminiProvider: MenuVisionProvider {
                 translated: raw.translated.trimmingCharacters(in: .whitespacesAndNewlines),
                 price: price,
                 priceNote: priceNote,
-                category: raw.category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                category: normalized(raw.category) ?? "其他",
                 lowConfidence: raw.lowConfidence ?? false
             )
         }

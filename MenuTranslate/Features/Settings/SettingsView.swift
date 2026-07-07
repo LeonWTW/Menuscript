@@ -91,7 +91,7 @@ struct SettingsView: View {
                     .keyboardType(.decimalPad)
                 HStack {
                     Button("儲存") { saveFXOverride() }
-                        .disabled(fxFromCode.isEmpty || fxToCode.isEmpty || Double(fxRateInput) == nil)
+                        .disabled(!isValidFXOverrideInput)
                     Spacer()
                     Button("清除 Override", role: .destructive) { clearFXOverride() }
                         .disabled(fxFromCode.isEmpty || fxToCode.isEmpty)
@@ -99,7 +99,7 @@ struct SettingsView: View {
             } header: {
                 Text("匯率")
             } footer: {
-                Text("留空用自動匯率（ECB 日更）")
+                Text("留空用自動匯率（ECB 日更）。呢度嘅設定只會影響之後新辨識嘅菜單，唔會改到已經辨識咗嘅舊記錄。")
             }
 
             Section {
@@ -148,17 +148,30 @@ struct SettingsView: View {
         guard !apiKeyInput.isEmpty else { return }
         try? keychainStore.set(apiKeyInput, forKey: KeychainStore.geminiAPIKey)
         apiKeyInput = ""
-        hasStoredKey = true
+        // Read back instead of assuming success: if the Keychain write
+        // silently failed, this correctly leaves the ✓ badge off rather than
+        // showing a stored key that isn't actually there.
+        refreshKeyState()
     }
 
     private func clearAPIKey() {
         try? keychainStore.delete(KeychainStore.geminiAPIKey)
         apiKeyInput = ""
-        hasStoredKey = false
+        refreshKeyState()
+    }
+
+    private var isValidFXOverrideInput: Bool {
+        guard let rate = Double(fxRateInput), rate.isFinite, rate > 0 else { return false }
+        return isValidCurrencyCode(fxFromCode) && isValidCurrencyCode(fxToCode)
+    }
+
+    private func isValidCurrencyCode(_ code: String) -> Bool {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return trimmed.range(of: "^[A-Z]{3}$", options: .regularExpression) != nil
     }
 
     private func saveFXOverride() {
-        guard let rate = Double(fxRateInput), !fxFromCode.isEmpty, !fxToCode.isEmpty else { return }
+        guard isValidFXOverrideInput, let rate = Double(fxRateInput) else { return }
         fxService.setManualOverride(rate, from: fxFromCode, to: fxToCode)
     }
 

@@ -24,15 +24,19 @@ enum MenuLogic {
         return matching.sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    /// Cart totals over items with `quantity > 0` and a non-nil `priceValue`:
-    /// `kinds` is the count of distinct qualifying items, `count` is the sum
-    /// of their quantities, and `subtotal` is the sum of `priceValue × quantity`.
-    static func totals(items: [MenuItem]) -> (kinds: Int, count: Int, subtotal: Decimal) {
-        let priced = items.filter { $0.quantity > 0 && $0.priceValue != nil }
-        let count = priced.reduce(0) { $0 + $1.quantity }
-        let subtotal = priced.reduce(Decimal(0)) { runningTotal, item in
+    /// Cart totals over all items with `quantity > 0` (matching `BillView.orderLines`):
+    /// `kinds` is the count of distinct ordered items and `count` is the sum of their
+    /// quantities — both include unpriced (時價) lines, so an order made up entirely of
+    /// unpriced items still surfaces a non-zero cart. `subtotal` sums `priceValue × quantity`
+    /// over the priced subset only; `hasUnpriced` flags whether any ordered line was left
+    /// out of `subtotal` because it has no price.
+    static func totals(items: [MenuItem]) -> (kinds: Int, count: Int, subtotal: Decimal, hasUnpriced: Bool) {
+        let ordered = items.filter { $0.quantity > 0 }
+        let count = ordered.reduce(0) { $0 + $1.quantity }
+        let subtotal = ordered.reduce(Decimal(0)) { runningTotal, item in
             runningTotal + (item.priceValue ?? 0) * Decimal(item.quantity)
         }
-        return (kinds: priced.count, count: count, subtotal: subtotal)
+        let hasUnpriced = ordered.contains { $0.priceValue == nil }
+        return (kinds: ordered.count, count: count, subtotal: subtotal, hasUnpriced: hasUnpriced)
     }
 }

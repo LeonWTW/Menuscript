@@ -8,11 +8,11 @@ import SwiftUI
 /// and Settings routing are handed back to the caller through closures.
 struct CaptureView: View {
     @Bindable var vm: CaptureViewModel
-    var openSettings: () -> Void = {}
     var onComplete: (MenuSession) -> Void = { _ in }
 
     @State private var pickerSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
+    @State private var showSettings = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -63,7 +63,7 @@ struct CaptureView: View {
             }
         }
         .alert("未設定 API key", isPresented: $vm.needsAPIKey) {
-            Button("去 Settings") { openSettings() }
+            Button("去 Settings") { showSettings = true }
             Button("取消", role: .cancel) {}
         } message: {
             Text("請先喺設定入面填返 Gemini API Key，或者開啟示範模式。")
@@ -72,6 +72,11 @@ struct CaptureView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(vm.errorMessage ?? "")
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView()
+            }
         }
     }
 
@@ -163,7 +168,7 @@ struct CaptureView: View {
 
     private var recognizeButton: some View {
         Button {
-            Task { await vm.recognize() }
+            vm.startRecognize()
         } label: {
             Text("開始辨識")
                 .frame(maxWidth: .infinity)

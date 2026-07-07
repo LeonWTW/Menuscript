@@ -56,7 +56,7 @@ struct MenuLogicTests {
         #expect(result.map(\.originalName) == ["B", "C"])
     }
 
-    @Test("Totals ignore qty 0 and nil-price items, summing priced quantities")
+    @Test("Totals ignore qty-0 items but count unpriced ordered items in kinds/count, not subtotal")
     func totalsIgnoresZeroQtyAndNilPrice() {
         let items = [
             makeItem(priceValue: Decimal(500), category: "燒烤", quantity: 2, sortOrder: 0),
@@ -65,9 +65,22 @@ struct MenuLogicTests {
             makeItem(priceValue: Decimal(650), category: "主食", quantity: 1, sortOrder: 3),
         ]
         let result = MenuLogic.totals(items: items)
-        #expect(result.kinds == 2)
-        #expect(result.count == 3)
+        #expect(result.kinds == 3)
+        #expect(result.count == 6)
         #expect(result.subtotal == Decimal(1650))
+        #expect(result.hasUnpriced == true)
+    }
+
+    @Test("An order made up entirely of unpriced items still surfaces a non-zero kind/count so the cart bar is not hidden")
+    func totalsOfUnpricedOnlyOrderIsNotHidden() {
+        let items = [
+            makeItem(priceValue: nil, category: "飲品", quantity: 2, sortOrder: 0),
+        ]
+        let result = MenuLogic.totals(items: items)
+        #expect(result.kinds == 1)
+        #expect(result.count == 2)
+        #expect(result.subtotal == Decimal(0))
+        #expect(result.hasUnpriced == true)
     }
 
     @Test("Totals of an empty list are all zero")
@@ -76,5 +89,6 @@ struct MenuLogicTests {
         #expect(result.kinds == 0)
         #expect(result.count == 0)
         #expect(result.subtotal == Decimal(0))
+        #expect(result.hasUnpriced == false)
     }
 }

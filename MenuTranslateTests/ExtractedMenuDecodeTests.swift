@@ -166,6 +166,25 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(result, "冬蔭功係泰國代表性酸辣蝦湯，主要材料有蝦、香茅、南薑同青檸葉。味道酸辣濃郁，通常配白飯食。")
     }
 
+    // A missing or blank category (tolerant decode: WireItem.category is
+    // Optional) must not surface as an empty, unlabeled category chip.
+    func testMissingOrBlankCategoryFallsBackToOther() throws {
+        let inner = """
+        {
+          "detectedLanguage": "日文",
+          "menuCurrency": "JPY",
+          "restaurantName": null,
+          "items": [
+            {"original": "A", "translated": "A", "price": "100", "priceNote": null, "lowConfidence": false},
+            {"original": "B", "translated": "B", "price": "200", "priceNote": null, "category": "   ", "lowConfidence": false}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+        XCTAssertEqual(menu.items[0].category, "其他")
+        XCTAssertEqual(menu.items[1].category, "其他")
+    }
+
     // Envelope with no candidates (e.g. safety-blocked) → .decodeFailed.
     func testEnvelopeWithoutCandidatesThrowsDecodeFailed() {
         let data = try! JSONSerialization.data(withJSONObject: ["promptFeedback": ["blockReason": "SAFETY"]])

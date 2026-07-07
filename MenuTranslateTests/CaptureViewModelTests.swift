@@ -16,6 +16,24 @@ private struct FailingVisionProvider: MenuVisionProvider {
     }
 }
 
+/// A `MenuVisionProvider` whose `extractMenu` sleeps long enough for a test
+/// to cancel it mid-flight, used to exercise cooperative cancellation.
+private struct SlowVisionProvider: MenuVisionProvider {
+    func extractMenu(images: [Data], targetLanguage: String) async throws -> ExtractedMenu {
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        return ExtractedMenu(
+            detectedLanguage: "日文",
+            menuCurrency: "JPY",
+            restaurantName: nil,
+            items: [ExtractedMenu.Item(original: "test", translated: "test", price: Decimal(100), priceNote: nil, category: "測試", lowConfidence: false)]
+        )
+    }
+
+    func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
+        "explanation"
+    }
+}
+
 @MainActor
 @Suite("CaptureViewModel")
 struct CaptureViewModelTests {
@@ -59,7 +77,10 @@ struct CaptureViewModelTests {
         #expect(viewModel.isRecognizing == false)
         #expect(viewModel.errorMessage == nil)
         #expect(viewModel.needsAPIKey == false)
-        #expect(viewModel.photos.count == 1)
+        // Photos are cleared once the session is safely persisted, so the
+        // full-resolution UIImages don't linger in memory while the user
+        // browses MenuView/BillView afterwards.
+        #expect(viewModel.photos.isEmpty)
 
         let session = try #require(viewModel.completedSession)
         #expect(session.items.count == 10)
@@ -87,6 +108,26 @@ struct CaptureViewModelTests {
         #expect(viewModel.photos.count == 1)
         #expect(viewModel.completedSession == nil)
         #expect(viewModel.isRecognizing == false)
+    }
+
+    @Test("Cancelling recognize before it finishes discards the result: no session is persisted, no error is shown")
+    func cancellingRecognizeDiscardsInFlightResult() async throws {
+        let context = try makeContext()
+        let viewModel = CaptureViewModel(modelContext: context, provider: SlowVisionProvider())
+        viewModel.addPhotos([makeDemoImage()])
+
+        let task = Task { await viewModel.recognize() }
+        try await Task.sleep(nanoseconds: 50_000_000) // let it enter the provider's sleep
+        task.cancel()
+        await task.value
+
+        #expect(viewModel.isRecognizing == false)
+        #expect(viewModel.completedSession == nil)
+        #expect(viewModel.errorMessage == nil)
+        #expect(viewModel.photos.count == 1) // preserved: nothing was persisted to clear them for
+
+        let fetchedSessions = try context.fetch(FetchDescriptor<MenuSession>())
+        #expect(fetchedSessions.isEmpty)
     }
 
     @Test("Missing API key with mock disabled sets needsAPIKey")

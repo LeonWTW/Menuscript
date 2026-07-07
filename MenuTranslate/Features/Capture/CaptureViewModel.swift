@@ -21,15 +21,19 @@ final class CaptureViewModel {
     private let modelContext: ModelContext
     private let injectedProvider: MenuVisionProvider?
     private let keychainStore: KeychainStore
+    private let fxService: FXService
+    private var recognizeTask: Task<Void, Never>?
 
     init(
         modelContext: ModelContext,
         provider: MenuVisionProvider? = nil,
-        keychainStore: KeychainStore = KeychainStore()
+        keychainStore: KeychainStore = KeychainStore(),
+        fxService: FXService = FXService()
     ) {
         self.modelContext = modelContext
         self.injectedProvider = provider
         self.keychainStore = keychainStore
+        self.fxService = fxService
     }
 
     func addPhotos(_ images: [UIImage]) {
@@ -39,6 +43,24 @@ final class CaptureViewModel {
     func removePhoto(at index: Int) {
         guard photos.indices.contains(index) else { return }
         photos.remove(at: index)
+    }
+
+    /// Starts `recognize()` as a task owned by this view model, so a later
+    /// `cancelRecognize()` call (e.g. the user tapping 取消) can actually
+    /// interrupt the in-flight request instead of merely dismissing the UI.
+    func startRecognize() {
+        guard canRecognize else { return }
+        recognizeTask = Task { [weak self] in
+            await self?.recognize()
+        }
+    }
+
+    /// Cancels the in-flight `recognize()` task, if any. `recognize()` checks
+    /// `Task.isCancelled` after each await and bails out before persisting
+    /// anything, so a cancelled recognition never inserts a session.
+    func cancelRecognize() {
+        recognizeTask?.cancel()
+        recognizeTask = nil
     }
 
     func recognize() async {
@@ -56,20 +78,25 @@ final class CaptureViewModel {
         let provider: MenuVisionProvider
         if let injectedProvider {
             provider = injectedProvider
-        } else if defaults.bool(forKey: SettingsKeys.useMockProvider) {
-            provider = MockVisionProvider()
-        } else if let apiKey = keychainStore.get(KeychainStore.geminiAPIKey), !apiKey.isEmpty {
-            let model = defaults.string(forKey: SettingsKeys.geminiModel) ?? "gemini-2.5-flash"
-            provider = GeminiProvider(apiKey: { apiKey }, model: model)
+        } else if let resolved = ProviderFactory.resolve(keychain: keychainStore) {
+            provider = resolved
         } else {
             needsAPIKey = true
             return
         }
 
         do {
-            let imageData = photos.compactMap { ImagePrep.jpegData(from: $0) }
+            // Downscale/encode off the main actor: at 6 full-res photos this is
+            // ~1-3s of JPEG work that would otherwise stall the UI before the
+            // recognising overlay even has a chance to render.
+            let imageData = await Task.detached(priority: .userInitiated) { [photos] in
+                photos.compactMap { ImagePrep.jpegData(from: $0) }
+            }.value
             let extracted = try await provider.extractMenu(images: imageData, targetLanguage: targetLanguage)
-            let fxRate = await FXService().rate(from: extracted.menuCurrency, to: homeCurrency)
+            guard !Task.isCancelled else { return }
+
+            let fxRate = await fxService.rate(from: extracted.menuCurrency, to: homeCurrency)
+            guard !Task.isCancelled else { return }
 
             let items = extracted.items.enumerated().map { index, item in
                 MenuItem(
@@ -96,10 +123,13 @@ final class CaptureViewModel {
                 items: items
             )
 
+            guard !Task.isCancelled else { return }
             modelContext.insert(session)
             try modelContext.save()
             completedSession = session
+            photos.removeAll()
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = (error as? VisionProviderError)?.errorDescription ?? error.localizedDescription
         }
     }

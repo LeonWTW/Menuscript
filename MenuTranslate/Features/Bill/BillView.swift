@@ -11,9 +11,18 @@ struct BillView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var isRefreshingRate = false
+
     private let surchargePresets: [Double] = [0, 8, 10]
     private let surchargeBounds: ClosedRange<Double> = 0...30
     private let peopleBounds: ClosedRange<Int> = 1...20
+
+    private static let fxDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     var body: some View {
         ScrollView {
@@ -135,9 +144,11 @@ struct BillView: View {
                 .font(.mtChip)
                 .foregroundStyle(Color.mtTextSecondary)
             surchargeControls
-            Text("日本消費稅通常 10%（堂食）／8%（外賣）")
-                .font(.footnote)
-                .foregroundStyle(Color.mtTextSecondary)
+            if session.menuCurrency.uppercased() == "JPY" {
+                Text("日本消費稅通常 10%（堂食）／8%（外賣）")
+                    .font(.footnote)
+                    .foregroundStyle(Color.mtTextSecondary)
+            }
         }
         .padding(MTSpacing.cardPadding)
         .background(sectionBackground)
@@ -218,9 +229,66 @@ struct BillView: View {
             summaryRow(label: "附加費", value: CurrencyFormat.format(surchargeAmount, code: session.menuCurrency))
             Divider()
             totalHero
+            if session.menuCurrency.uppercased() != session.homeCurrency.uppercased() {
+                fxStatusLine
+            }
         }
         .padding(MTSpacing.cardPadding)
         .background(sectionBackground)
+    }
+
+    // MARK: - FX status
+
+    /// Surfaces the rate actually used for this session's conversions (with
+    /// its date) so a changed override/live rate is never silently at odds
+    /// with what the user sees on screen, and explains the gap when no rate
+    /// could be resolved at all instead of just omitting the conversion.
+    private var fxStatusLine: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(fxStatusText)
+                .font(.footnote)
+                .foregroundStyle(Color.mtTextSecondary)
+            Spacer(minLength: 8)
+            refreshRateButton
+        }
+    }
+
+    private var fxStatusText: String {
+        guard let fxRate = session.fxRate else {
+            return "攞唔到 \(session.menuCurrency)→\(session.homeCurrency) 匯率，可以喺設定入面手動輸入"
+        }
+        let rateText = String(format: "%.4f", fxRate)
+        let dateText = session.fxRateDate.map { Self.fxDateFormatter.string(from: $0) }
+        let rateDescription = "匯率 1 \(session.menuCurrency) ≈ \(rateText) \(session.homeCurrency)"
+        return dateText.map { "\(rateDescription)（\($0)）" } ?? rateDescription
+    }
+
+    private var refreshRateButton: some View {
+        Button {
+            Task { await refreshFXRate() }
+        } label: {
+            if isRefreshingRate {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(Color.mtAccent)
+            }
+        }
+        .buttonStyle(.plain)
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .disabled(isRefreshingRate)
+        .accessibilityLabel("更新匯率")
+    }
+
+    private func refreshFXRate() async {
+        isRefreshingRate = true
+        defer { isRefreshingRate = false }
+        guard let fresh = await FXService().rate(from: session.menuCurrency, to: session.homeCurrency) else { return }
+        session.fxRate = fresh.rate
+        session.fxRateDate = fresh.date
     }
 
     private func summaryRow(label: String, value: String) -> some View {
@@ -258,7 +326,7 @@ struct BillView: View {
     private func totalAmountStack(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 2) {
             if let convertedTotal {
-                Text(CurrencyFormat.format(convertedTotal, code: session.homeCurrency))
+                Text("≈ " + CurrencyFormat.format(convertedTotal, code: session.homeCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
                 Text(CurrencyFormat.format(total, code: session.menuCurrency))
@@ -331,7 +399,7 @@ struct BillView: View {
     private func perPersonAmountStack(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 2) {
             if let perPersonConverted {
-                Text(CurrencyFormat.format(perPersonConverted, code: session.homeCurrency))
+                Text("≈ " + CurrencyFormat.format(perPersonConverted, code: session.homeCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
                 Text(CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency))

@@ -14,14 +14,22 @@ struct KeychainStore: Sendable {
     }
 
     /// Upserts `value` under `key`: updates the existing item if present,
-    /// otherwise adds a new one.
+    /// otherwise adds a new one. Both paths pin the item to
+    /// `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` — a BYOK secret only
+    /// ever needed in the foreground on this device has no business
+    /// migrating onto another device via an encrypted backup restore, which
+    /// is what the previous default accessibility class allowed.
     func set(_ value: String, forKey key: String) throws {
         let data = Data(value.utf8)
         let matchQuery = query(forKey: key)
 
+        let updateAttributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
         let updateStatus = SecItemUpdate(
             matchQuery as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary
+            updateAttributes as CFDictionary
         )
 
         switch updateStatus {
@@ -30,6 +38,7 @@ struct KeychainStore: Sendable {
         case errSecItemNotFound:
             var addQuery = matchQuery
             addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
             guard addStatus == errSecSuccess else {
                 throw KeychainError.unhandledStatus(addStatus)

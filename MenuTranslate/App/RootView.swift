@@ -11,6 +11,7 @@ struct RootView: View {
     @State private var captureViewModel: CaptureViewModel?
     @State private var showCapture = false
     @State private var showSettings = false
+    @State private var showCancelCaptureConfirm = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -40,7 +41,9 @@ struct RootView: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 Button {
-                    captureViewModel = CaptureViewModel(modelContext: modelContext)
+                    if captureViewModel == nil {
+                        captureViewModel = CaptureViewModel(modelContext: modelContext)
+                    }
                     showCapture = true
                 } label: {
                     Label("影菜單", systemImage: "camera.fill")
@@ -55,15 +58,11 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(nil)
-        .fullScreenCover(isPresented: $showCapture) {
+        .fullScreenCover(isPresented: $showCapture, onDismiss: { captureViewModel = nil }) {
             if let captureViewModel {
                 NavigationStack {
                     CaptureView(
                         vm: captureViewModel,
-                        openSettings: {
-                            showCapture = false
-                            showSettings = true
-                        },
                         onComplete: { session in
                             showCapture = false
                             navigationPath.append(session)
@@ -71,9 +70,17 @@ struct RootView: View {
                     )
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { showCapture = false }
+                            Button("取消") { requestCancelCapture(vm: captureViewModel) }
                         }
                     }
+                }
+                .confirmationDialog(
+                    "捨棄呢批菜單相？",
+                    isPresented: $showCancelCaptureConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("捨棄相片", role: .destructive) { showCapture = false }
+                    Button("繼續影相", role: .cancel) {}
                 }
             }
         }
@@ -100,6 +107,21 @@ struct RootView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.mtBackground)
+    }
+
+    /// Handles the capture cover's toolbar 取消 button. While recognition is
+    /// in flight, cancels the underlying task (instead of merely dismissing
+    /// the UI while the request keeps running). Otherwise, if the user has
+    /// already gathered photos, confirms before discarding them.
+    private func requestCancelCapture(vm: CaptureViewModel) {
+        if vm.isRecognizing {
+            vm.cancelRecognize()
+            showCapture = false
+        } else if !vm.photos.isEmpty {
+            showCancelCaptureConfirm = true
+        } else {
+            showCapture = false
+        }
     }
 
     private func deleteSessions(at offsets: IndexSet) {

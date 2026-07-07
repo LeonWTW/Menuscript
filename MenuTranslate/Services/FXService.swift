@@ -66,7 +66,18 @@ final class FXService: @unchecked Sendable {
     }
 
     private func fetchLive(from: String, to: String) async throws -> (rate: Double, date: Date) {
-        guard let url = URL(string: "https://api.frankfurter.app/latest?from=\(from)&to=\(to)") else {
+        // Defense-in-depth: `from`/`to` can originate from free-text Settings
+        // fields or a Gemini-detected currency, so reject anything that isn't
+        // a plain 3-letter code before it reaches the query string.
+        guard Self.isValidCurrencyCode(from), Self.isValidCurrencyCode(to) else {
+            throw URLError(.badURL)
+        }
+        var components = URLComponents(string: "https://api.frankfurter.dev/v1/latest")
+        components?.queryItems = [
+            URLQueryItem(name: "from", value: from),
+            URLQueryItem(name: "to", value: to),
+        ]
+        guard let url = components?.url else {
             throw URLError(.badURL)
         }
 
@@ -81,6 +92,11 @@ final class FXService: @unchecked Sendable {
         }
 
         return (rateValue, Self.parseDate(decoded.date) ?? Date())
+    }
+
+    /// `from`/`to` are expected to already be uppercased by the caller.
+    private static func isValidCurrencyCode(_ code: String) -> Bool {
+        code.range(of: "^[A-Z]{3}$", options: .regularExpression) != nil
     }
 
     private static func overrideKey(from: String, to: String) -> String {
