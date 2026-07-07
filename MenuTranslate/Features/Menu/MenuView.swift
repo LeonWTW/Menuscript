@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The Menu screen (WF-4): category-filtered dish list with a floating cart
 /// bar. Presentation only — screen data flows exclusively through
-/// `MenuLogic`; explain and checkout are temporary placeholders pending WF-5.
+/// `MenuLogic`; explain (`ExplainSheet`) and checkout (`BillView`) are
+/// presented as sheets.
 struct MenuView: View {
     let session: MenuSession
 
@@ -94,8 +95,23 @@ struct MenuView: View {
             explainSheet(for: item)
         }
         .sheet(isPresented: $showBill) {
-            billSheet
+            NavigationStack {
+                BillView(session: session)
+                    .navigationTitle("帳單")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { showBill = false }
+                        }
+                    }
+            }
+            .presentationDetents([.large])
         }
+        #if DEBUG
+        .task {
+            applyAutoDemoScreenIfNeeded()
+        }
+        #endif
     }
 
     private var emptyCategoryState: some View {
@@ -113,33 +129,24 @@ struct MenuView: View {
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder
     private func explainSheet(for item: MenuItem) -> some View {
-        // MARK: WF-5 replaces
-        VStack(spacing: 16) {
-            Text(item.translatedName)
-                .font(.headline)
-            ProgressView()
-            Text("解釋功能 WF-5 加入")
-                .foregroundStyle(.secondary)
-        }
-        .padding()
+        ExplainSheet(item: item)
     }
 
-    private var billSheet: some View {
-        // MARK: WF-5 replaces
-        VStack(spacing: 16) {
-            Text("結帳 WF-5 加入")
-                .font(.headline)
-            Text(originalSubtotalText)
-                .font(.title3)
-            if let convertedSubtotalText {
-                Text(convertedSubtotalText)
-                    .foregroundStyle(.secondary)
-            }
+    #if DEBUG
+    /// Deep link for automated screenshots/demos: jumps straight into a
+    /// sheet based on the "autoDemoScreen" UserDefaults string.
+    private func applyAutoDemoScreenIfNeeded() {
+        switch UserDefaults.standard.string(forKey: "autoDemoScreen") {
+        case "bill":
+            showBill = true
+        case "explain":
+            explainItem = MenuLogic.filtered(items: session.items, category: nil).first
+        default:
+            break
         }
-        .padding()
     }
+    #endif
 }
 
 #Preview {
