@@ -1,7 +1,29 @@
+# Xcode
 *.xcodeproj
 DerivedData/
 xcuserdata/
-.DS_Store
+*.xcuserstate
 build/
 .swiftpm
-/Info.plist
+
+# macOS
+.DS_Store
+
+# Secrets / local config — never commit
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+*.cer
+*.keystore
+secrets.*
+google-services.plist
+GoogleService-Info.plist
+
+# AI assistant working files — not part of the project deliverable
+CLAUDE.md
+.claude/
+
+# Misc local tooling artifacts
+.ruff_cache/
