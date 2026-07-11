@@ -41,13 +41,21 @@ struct CaptureViewModelTests {
         SettingsKeys.targetLanguage,
         SettingsKeys.homeCurrency,
         SettingsKeys.geminiModel,
-        SettingsKeys.useMockProvider
+        SettingsKeys.useMockProvider,
+        SettingsKeys.appLanguage
     ]
 
     init() {
         for key in settingsKeysToReset {
             UserDefaults.standard.removeObject(forKey: key)
         }
+        // Pin appLanguage explicitly: with targetLanguage unset,
+        // `recognize()` falls back to `SettingsKeys.defaultTargetLanguage()`,
+        // which follows the system locale when appLanguage is unset/.system.
+        // Pinning to zh-Hant keeps this suite's expectations deterministic
+        // across host/CI locales instead of depending on the test runner's
+        // system language.
+        UserDefaults.standard.set(AppLanguage.zhHant.rawValue, forKey: SettingsKeys.appLanguage)
     }
 
     private func makeContext() throws -> ModelContext {

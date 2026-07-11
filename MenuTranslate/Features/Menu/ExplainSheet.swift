@@ -10,6 +10,8 @@ struct ExplainSheet: View {
 
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isConfigError = false
+    @State private var showSettings = false
 
     init(item: MenuItem) {
         self.item = item
@@ -48,6 +50,11 @@ struct ExplainSheet: View {
         .task {
             guard !hasCachedExplanation else { return }
             await fetchExplanation(forceRefresh: false)
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView()
+            }
         }
     }
 
@@ -110,10 +117,17 @@ struct ExplainSheet: View {
             Text(message)
                 .font(.body)
                 .foregroundStyle(Color.mtTextPrimary)
-            Button("再試一次") {
-                Task { await fetchExplanation(forceRefresh: true) }
+            if isConfigError {
+                Button("去 Settings") {
+                    showSettings = true
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button("再試一次") {
+                    Task { await fetchExplanation(forceRefresh: true) }
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
         }
     }
 
@@ -139,11 +153,13 @@ struct ExplainSheet: View {
         guard forceRefresh || !hasCachedExplanation else { return }
 
         errorMessage = nil
+        isConfigError = false
         isLoading = true
         defer { isLoading = false }
 
         guard let provider = ProviderFactory.resolve() else {
             errorMessage = L10n.string("未設定 API key，去 Settings 設定先用得解釋功能")
+            isConfigError = true
             return
         }
 
@@ -158,6 +174,9 @@ struct ExplainSheet: View {
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = (error as? VisionProviderError)?.errorDescription ?? error.localizedDescription
+            if case .missingAPIKey = error as? VisionProviderError {
+                isConfigError = true
+            }
         }
     }
 }
