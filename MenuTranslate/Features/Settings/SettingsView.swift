@@ -7,7 +7,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @AppStorage(SettingsKeys.targetLanguage) private var targetLanguage: String = "繁體中文"
+    @AppStorage(SettingsKeys.targetLanguage) private var targetLanguage: String = SettingsKeys.defaultTargetLanguage()
     @AppStorage(SettingsKeys.homeCurrency) private var homeCurrency: String = "USD"
     @AppStorage(SettingsKeys.geminiModel) private var geminiModel: String = "gemini-2.5-flash"
     @AppStorage(SettingsKeys.useMockProvider) private var useMockProvider: Bool = false
@@ -15,6 +15,7 @@ struct SettingsView: View {
 
     @State private var apiKeyInput: String = ""
     @State private var hasStoredKey: Bool = false
+    @State private var keychainError: String?
 
     @State private var fxFromCode: String = ""
     @State private var fxToCode: String = ""
@@ -46,6 +47,11 @@ struct SettingsView: View {
                 if hasStoredKey {
                     Label("已設定 ✓", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .font(.footnote)
+                }
+                if let keychainError {
+                    Label(keychainError, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
                         .font(.footnote)
                 }
                 HStack {
@@ -169,11 +175,13 @@ struct SettingsView: View {
 
     private func saveAPIKey() {
         guard !apiKeyInput.isEmpty else { return }
-        try? keychainStore.set(apiKeyInput, forKey: KeychainStore.geminiAPIKey)
+        do {
+            try keychainStore.set(apiKeyInput, forKey: KeychainStore.geminiAPIKey)
+            keychainError = nil
+        } catch {
+            keychainError = error.localizedDescription
+        }
         apiKeyInput = ""
-        // Read back instead of assuming success: if the Keychain write
-        // silently failed, this correctly leaves the ✓ badge off rather than
-        // showing a stored key that isn't actually there.
         refreshKeyState()
     }
 

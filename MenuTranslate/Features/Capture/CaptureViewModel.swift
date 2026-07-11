@@ -9,7 +9,7 @@ import UIKit
 /// menu, fetches an FX rate, and persists the result as a `MenuSession`.
 @Observable
 @MainActor
-final class CaptureViewModel {
+final class CaptureViewModel: Identifiable {
     var photos: [UIImage] = []
     var isRecognizing: Bool = false
     var errorMessage: String? = nil
@@ -72,7 +72,7 @@ final class CaptureViewModel {
         defer { isRecognizing = false }
 
         let defaults = UserDefaults.standard
-        let targetLanguage = defaults.string(forKey: SettingsKeys.targetLanguage) ?? "繁體中文"
+        let targetLanguage = defaults.string(forKey: SettingsKeys.targetLanguage) ?? SettingsKeys.defaultTargetLanguage()
         let homeCurrency = defaults.string(forKey: SettingsKeys.homeCurrency) ?? "USD"
 
         let provider: MenuVisionProvider

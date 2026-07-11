@@ -9,7 +9,6 @@ struct RootView: View {
     @Query(sort: \MenuSession.createdAt, order: .reverse) private var sessions: [MenuSession]
     @State private var navigationPath: [MenuSession] = []
     @State private var captureViewModel: CaptureViewModel?
-    @State private var showCapture = false
     @State private var showSettings = false
     @State private var showCancelCaptureConfirm = false
 
@@ -41,10 +40,7 @@ struct RootView: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 Button {
-                    if captureViewModel == nil {
-                        captureViewModel = CaptureViewModel(modelContext: modelContext)
-                    }
-                    showCapture = true
+                    captureViewModel = CaptureViewModel(modelContext: modelContext)
                 } label: {
                     Label("影菜單", systemImage: "camera.fill")
                         .labelStyle(.iconOnly)
@@ -58,30 +54,28 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(nil)
-        .fullScreenCover(isPresented: $showCapture, onDismiss: { captureViewModel = nil }) {
-            if let captureViewModel {
-                NavigationStack {
-                    CaptureView(
-                        vm: captureViewModel,
-                        onComplete: { session in
-                            showCapture = false
-                            navigationPath.append(session)
-                        }
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { requestCancelCapture(vm: captureViewModel) }
-                        }
+        .fullScreenCover(item: $captureViewModel) { vm in
+            NavigationStack {
+                CaptureView(
+                    vm: vm,
+                    onComplete: { session in
+                        captureViewModel = nil
+                        navigationPath.append(session)
+                    }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { requestCancelCapture(vm: vm) }
                     }
                 }
-                .confirmationDialog(
-                    "捨棄呢批菜單相？",
-                    isPresented: $showCancelCaptureConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("捨棄相片", role: .destructive) { showCapture = false }
-                    Button("繼續影相", role: .cancel) {}
-                }
+            }
+            .confirmationDialog(
+                "捨棄呢批菜單相？",
+                isPresented: $showCancelCaptureConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("捨棄相片", role: .destructive) { captureViewModel = nil }
+                Button("繼續影相", role: .cancel) {}
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -116,11 +110,11 @@ struct RootView: View {
     private func requestCancelCapture(vm: CaptureViewModel) {
         if vm.isRecognizing {
             vm.cancelRecognize()
-            showCapture = false
+            captureViewModel = nil
         } else if !vm.photos.isEmpty {
             showCancelCaptureConfirm = true
         } else {
-            showCapture = false
+            captureViewModel = nil
         }
     }
 
