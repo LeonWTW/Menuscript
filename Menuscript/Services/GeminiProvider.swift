@@ -348,7 +348,7 @@ struct GeminiProvider: MenuVisionProvider {
     /// `Decimal(string:)` alone would silently accept "600〜" as 600.
     private static func wirePriceDecimal(_ raw: String) -> Decimal? {
         let cleaned = raw.replacingOccurrences(of: ",", with: "")
-        guard cleaned.range(of: #"^-?[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else {
+        guard cleaned.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else {
             return nil
         }
         return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))

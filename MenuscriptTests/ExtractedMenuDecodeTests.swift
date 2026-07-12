@@ -145,6 +145,26 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[3].price, Decimal(1200))
     }
 
+    // Regression: negative price strings must not parse as a price — menu prices
+    // are never negative, and an unguarded negative would silently reduce bill
+    // totals. It falls through to priceNote like any other non-numeric price text.
+    func testNegativePriceFallsThroughToPriceNote() throws {
+        let inner = """
+        {
+          "detectedLanguage": "英文",
+          "menuCurrency": "USD",
+          "restaurantName": null,
+          "items": [
+            {"original": "Mystery Item", "translated": "神秘餐點", "price": "-500", "priceNote": null, "category": "主食", "lowConfidence": false}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+
+        XCTAssertNil(menu.items[0].price)
+        XCTAssertEqual(menu.items[0].priceNote, "-500")
+    }
+
     // Defensive: model wrapped its JSON in a markdown fence despite instructions.
     func testCodeFencedInnerJSONIsStillParsed() throws {
         let inner = """

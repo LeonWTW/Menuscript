@@ -13,6 +13,8 @@ struct CaptureView: View {
     @State private var pickerSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showSettings = false
+    @State private var isLoadingPhotos = false
+    @State private var failedPhotoLoadCount = 0
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -28,6 +30,7 @@ struct CaptureView: View {
         ScrollView {
             VStack(spacing: 20) {
                 photoSection
+                photoLoadStatus
                 addButtons
                 recognizeButton
             }
@@ -132,6 +135,22 @@ struct CaptureView: View {
             }
     }
 
+    @ViewBuilder
+    private var photoLoadStatus: some View {
+        if isLoadingPhotos {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("載入緊相片…")
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        } else if failedPhotoLoadCount > 0 {
+            Text("\(failedPhotoLoadCount) 張相載入失敗")
+                .font(.footnote)
+                .foregroundStyle(.red)
+        }
+    }
+
     // MARK: - Add photo controls
 
     private var addButtons: some View {
@@ -175,7 +194,7 @@ struct CaptureView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
-        .disabled(!vm.canRecognize)
+        .disabled(!vm.canRecognize || isLoadingPhotos)
     }
 
     private var recognizingOverlay: some View {
@@ -198,17 +217,26 @@ struct CaptureView: View {
 
     @MainActor
     private func loadPickedPhotos(_ items: [PhotosPickerItem]) async {
+        // Reset before awaiting any load: a mid-load re-pick must not
+        // re-append the items this call is already loading.
+        pickerSelection = []
+        isLoadingPhotos = true
+        defer { isLoadingPhotos = false }
+
         var images: [UIImage] = []
+        var failedCount = 0
         for item in items {
             if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
+               let image = ImagePrep.downsampledImage(from: data, maxPixelSize: ImagePrep.captureMaxPixelSize) {
                 images.append(image)
+            } else {
+                failedCount += 1
             }
         }
         if !images.isEmpty {
             vm.addPhotos(images)
         }
-        pickerSelection = []
+        failedPhotoLoadCount = failedCount
     }
 
     #if DEBUG

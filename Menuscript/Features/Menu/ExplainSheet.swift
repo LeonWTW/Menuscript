@@ -19,8 +19,7 @@ struct ExplainSheet: View {
 
     private var targetLanguage: String {
         item.session?.targetLanguage
-            ?? UserDefaults.standard.string(forKey: SettingsKeys.targetLanguage)
-            ?? "繁體中文"
+            ?? SettingsKeys.nonEmptyString(SettingsKeys.targetLanguage, from: .standard, default: "繁體中文")
     }
 
     private var hasCachedExplanation: Bool {

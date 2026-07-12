@@ -31,4 +31,22 @@ enum SettingsKeys {
         }
         return isEnglish ? "English" : "繁體中文"
     }
+
+    /// Reads a free-text setting, treating an empty or whitespace-only stored
+    /// value the same as an unset one. `TextField`s bound directly to
+    /// `@AppStorage` persist `""` when the user clears them, and plain
+    /// `defaults.string(forKey:) ?? fallbackValue` never catches that since
+    /// `??` only fires on `nil` — every such read site must go through here
+    /// instead so a cleared field falls back like a never-set one.
+    static func nonEmptyString(
+        _ key: String,
+        from defaults: UserDefaults = .standard,
+        default fallbackValue: String
+    ) -> String {
+        guard let stored = defaults.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !stored.isEmpty else {
+            return fallbackValue
+        }
+        return stored
+    }
 }

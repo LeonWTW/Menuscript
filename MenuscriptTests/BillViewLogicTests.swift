@@ -79,4 +79,28 @@ struct BillViewLogicTests {
         #expect(result == Decimal(string: "17.37"))
         #expect(result * Decimal(3) >= convertedTotal)
     }
+
+    @Test("effectiveFXRate suppresses same-currency sessions even when a legacy 1.0 rate is stored")
+    func effectiveFXRateNilForSameCurrencyEvenWithStoredRate() {
+        let session = MenuSession(
+            detectedLanguage: "日文",
+            targetLanguage: "繁體中文",
+            menuCurrency: "USD",
+            homeCurrency: "usd",
+            fxRate: 1.0
+        )
+        #expect(session.effectiveFXRate == nil)
+    }
+
+    @Test("effectiveFXRate passes the stored rate through for different currencies")
+    func effectiveFXRatePassesThroughForDifferentCurrencies() {
+        let session = MenuSession(
+            detectedLanguage: "日文",
+            targetLanguage: "繁體中文",
+            menuCurrency: "JPY",
+            homeCurrency: "USD",
+            fxRate: 0.0067
+        )
+        #expect(session.effectiveFXRate == 0.0067)
+    }
 }

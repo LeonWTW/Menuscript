@@ -35,7 +35,7 @@ struct MenuView: View {
     }
 
     private var convertedSubtotalText: String? {
-        guard let fxRate = session.fxRate else { return nil }
+        guard let fxRate = session.effectiveFXRate else { return nil }
         let converted = BillMath.converted(cartTotals.subtotal, rate: fxRate)
         return "≈ " + CurrencyFormat.format(converted, code: session.homeCurrency)
     }
@@ -55,7 +55,7 @@ struct MenuView: View {
                             item: item,
                             menuCurrency: session.menuCurrency,
                             homeCurrency: session.homeCurrency,
-                            fxRate: session.fxRate,
+                            fxRate: session.effectiveFXRate,
                             onExplain: { explainItem = $0 }
                         )
                     }

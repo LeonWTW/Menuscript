@@ -138,6 +138,25 @@ struct CaptureViewModelTests {
         #expect(fetchedSessions.isEmpty)
     }
 
+    @Test("Photo appended after recognition starts survives; the recognized snapshot is removed")
+    func photoAppendedDuringRecognitionSurvives() async throws {
+        let context = try makeContext()
+        let viewModel = CaptureViewModel(modelContext: context, provider: SlowVisionProvider())
+        let recognizedPhoto = makeDemoImage()
+        viewModel.addPhotos([recognizedPhoto])
+
+        let task = Task { await viewModel.recognize() }
+        try await Task.sleep(nanoseconds: 50_000_000) // let it enter the provider's sleep, past the snapshot point
+        let latePhoto = makeDemoImage()
+        viewModel.addPhotos([latePhoto])
+        await task.value
+
+        #expect(viewModel.isRecognizing == false)
+        #expect(viewModel.completedSession != nil)
+        #expect(viewModel.photos.count == 1)
+        #expect(viewModel.photos.first === latePhoto)
+    }
+
     @Test("Missing API key with mock disabled sets needsAPIKey")
     func missingAPIKeySetsNeedsAPIKey() async throws {
         UserDefaults.standard.set(false, forKey: SettingsKeys.useMockProvider)
