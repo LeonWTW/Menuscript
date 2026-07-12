@@ -57,7 +57,7 @@ None of the eight runtime flows above (actions 1–7) produced a mismatch betwee
 
 Independently verified by reading the current diff (not merely re-stating claims), the following pre-existing minor issues remain in the working tree and are called out here rather than silently left out of the record:
 
-1. **`README.md` test count was stale.** At the time of this verification pass, line 21 still read "42 tests across 11 suites, all passing," while the actual current suite (confirmed by this session's cited full run) is 46 tests across 12 suites — the new `SettingsKeysTests` suite (4 tests) added for fix 2 had not been reflected back into that line. *Corrected during the final review of this branch: README.md now reads 46 tests across 12 suites.*
+1. **`README.md` test count was stale.** At the time of this verification pass, line 21 still read "42 tests across 11 suites, all passing," while the actual current suite (confirmed by this session's cited full run) is 46 tests across 12 suites — the new `SettingsKeysTests` suite (4 tests) added for fix 2 had not been reflected back into that line. *Corrected during the final review of this branch: README.md was updated to 46 tests across 12 suites at that time (the line has since been refreshed again as the suite grew with later features).*
 2. **`ExplainSheet.swift`: no auto-refetch after dismissing Settings from the config-error state.** `.sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }` has no `onDismiss` handler, so a user who taps "去 Settings," enters a key, and dismisses Settings lands back on the same error view — they must notice and tap the toolbar's regenerate (arrow.clockwise) icon to actually retry. Not a dead end (there is a path forward), but a rough edge; not independently reproduced via UI in this pass because of the same tap-automation gap noted above — this is a direct code read (`ExplainSheet.swift`, the `.sheet(isPresented: $showSettings)` block around line 54), not a runtime observation.
 3. **`ExplainSheet.swift:23` still has a hardcoded `?? "繁體中文"` fallback** in `targetLanguage`, bypassing `SettingsKeys.defaultTargetLanguage()`. It's only reached when `item.session` is `nil` (an edge case, not the normal Capture → Menu → Explain flow used in this verification pass), which is why none of the actions above surfaced it — every item opened here had a live `session`.
 4. **`SettingsView.swift`'s `saveAPIKey()` clears `apiKeyInput` on both the success and the Keychain-write-failure path** (`apiKeyInput = ""` runs unconditionally after the `do`/`catch`, confirmed by reading lines 176–186). A user who hits a Keychain write error sees the correct error label but loses the key they just typed and must re-enter it in full. Not exercised in this pass (requires forcing a Keychain failure, which the mock/demo channel has no hook for).
@@ -67,3 +67,40 @@ None of items 1–4 block the feature slice from running end to end; they are do
 ## Engineering Conclusion
 
 The Sprint 2 feature slice (Capture → Menu → Bill → History) runs correctly end to end on iPhone 17 / iOS 26.3 with the mock provider, including FX conversion against a live rate, bill math (surcharge, AA split), and persistence across process relaunches. Both AI-review fixes hold up under direct UI observation as far as the simulator's scriptable surface allows: fix 2 (English-UI default target language) is fully confirmed by screenshot; fix 1 (ExplainSheet config-error escape hatch) is confirmed on its happy path and confirmed by code + the existing `ProviderFactoryTests` suite on its error branch, but not by a direct screenshot of the error UI itself, because reaching it requires a UI tap that `simctl` cannot script and this sandboxed session's automation tools (`osascript`, `cliclick`) both lack the Accessibility permission needed to drive the Simulator window. This is a verification-tooling limitation, not a discovered app defect. The four issues above are all pre-existing minor rough edges independently re-confirmed by reading the current diff, not new regressions introduced by this verification pass, and none of them prevent the feature slice from being run, explained, or reviewed.
+
+## 2026-07-12 — Allergen Warnings + Photo Search
+
+New feature pass covering the two Sprint 2 UX additions: per-dish allergen advisories (with an always-on one-line summary) and one-tap dish photo search.
+
+### Scope & Environment
+
+- **Date:** 2026-07-12
+- **Branch:** `sprint-2-prototype`
+- **Feature under test:** food-sensitivity allergen warnings + in-app photo search
+- **Automated suite:** green — `xcodebuild test` exit 0, Swift Testing 82/18 suites + XCTest 33, 0 failures (this is the automated baseline; it includes the new `AllergenTests`, `PhotoSearchTests`, and `GeminiRequestTests` plus the extended `CaptureViewModelTests` / `ExtractedMenuDecodeTests`).
+- **Manual pass status:** **PLANNED — not yet executed.** Every "Observed result" below is `pending — 待人手實測` and is to be filled in by a later hands-on run. No manual observation is claimed here. The intended manual environment mirrors the 2026-07-10 pass (iPhone simulator, mock provider driven by the `#if DEBUG` auto-demo launch arguments), plus one live-key run for the "all allergens off" case noted below.
+
+### Test Cases
+
+| # | Test case & expected behavior | Observed result |
+|---|-------------------------------|-----------------|
+| 1 | **Settings toggles persist.** In Settings → 食物敏感, toggling presets (e.g. 小麥, 大豆) and typing custom allergens (e.g. 香菜) writes `settings.allergenPresets` (comma-joined slugs) and `settings.allergenCustom`; the selections survive closing/reopening Settings and an app relaunch. | pending — 待人手實測 |
+| 2 | **Summaries on every card (mock).** With the mock provider on, a scan renders the 鷹の目 sample menu with a one-line summary under the original name on all ten cards (e.g. 焼きなす → 「炭烤茄子淋薑蓉醬油，清爽開胃」). | pending — 待人手實測 |
+| 3 | **Allergen warning icon (mock).** On the same mock scan, the 唐揚げ (日式炸雞) card shows the `allergens` warning icon beside the dish name — the mock seeds 唐揚げ with wheat/soy/egg; 焼き鳥盛り合わせ / 生ビール(小) / 豚汁 are likewise seeded. | pending — 待人手實測 |
+| 4 | **Allergen alert content.** Tapping the 唐揚げ warning icon opens the 「可能含有敏感原」 alert listing 小麥、大豆、蛋 followed by the disclaimer 「AI 推測僅供參考，落單前請務必同餐廳確認。」. | pending — 待人手實測 |
+| 5 | **Photo search opens in-app Safari.** Tapping a card's photo button opens an in-app `SFSafariViewController` showing Google Images results for the dish's original name (e.g. `www.google.com/search?q=唐揚げ&tbm=isch`); dismissing returns to the Menu without leaving the app. | pending — 待人手實測 |
+| 6 | **No warning icon when all allergens off.** With every preset toggle off and the custom field cleared, a menu recognized via the real Gemini provider shows no warning icon on any card (the request omits the allergen rule and schema field — see `GeminiRequestTests`). Note: the mock provider hard-codes allergen hits regardless of this setting, so this case is checked with a live key, not the mock. | pending — 待人手實測 |
+| 7 | **Old sessions unaffected.** A session captured before allergens were configured (empty `allergenProfile`, items with empty `possibleAllergens`) reopens from History with no warning icons and no advisory footnote, and does not crash — confirming the defaulted SwiftData fields migrate cleanly. | pending — 待人手實測 |
+
+### Automated Smoke Evidence (2026-07-12, later the same day)
+
+Before the hands-on pass, an automated simulator smoke run (driven via `simctl` and the `#if DEBUG` auto-demo launch arguments, with screenshots captured; no human interaction) verified a subset of the table above:
+
+- **Migration — case 7's crash-freedom half: PASS.** The pre-feature build (commit `19b803f`) was installed on a cleaned simulator and auto-demo generated two sessions under the old schema; the feature build was then installed in place as an upgrade. The app launched, stayed alive past 5 seconds, and History listed both old sessions — no lightweight-migration crash. Build identity was verified by content anchors (`allergenPresets` present in the new build's dylib, absent from the old) after an earlier smoke attempt was invalidated for accidentally installing a stale DerivedData product. The "old sessions show no icons/footnote" half of case 7, and an on-device check on an actual iOS 17.x device, remain manual.
+- **Summaries render — case 2, partial: PASS for all cards on screen.** On a fresh auto-demo scan with `-settings.allergenPresets "wheat,soy"`, every card visible in the screenshot (烤茄子, 日式炸雞, 鹽烤雞翅, 串燒拼盤, 日式炒飯) shows its one-line summary under the original name. Cards below the fold were not observed (no scroll automation).
+- **Warning icons — case 3, partial: PASS for the seeded/unseeded split on screen.** 日式炸雞 and 串燒拼盤 (mock-seeded with hits) show the allergens icon; 烤茄子 and 鹽烤雞翅 (seeded empty) correctly show none. On 日式炸雞 the icon renders beside the low-confidence triangle with no layout breakage.
+- Cases needing tap interaction or a live key (1, 4, 5, 6) were not exercised and stay with the manual pass.
+
+### Status
+
+Automated coverage for both features is in place and green (see Scope & Environment), and the same-day automated smoke run above additionally confirmed migration crash-freedom and the summary/icon render paths. The interactive cases (settings persistence, alert content, photo search) and the live-key case remain for the hands-on manual pass; the "Observed result" column is to be completed by that pass.
