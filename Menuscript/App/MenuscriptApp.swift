@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct MenuTranslateApp: App {
+struct MenuscriptApp: App {
     @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw: String = "system"
 
     var body: some Scene {

@@ -1,5 +1,5 @@
 import XCTest
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// Tests for `GeminiProvider.buildExtractRequest` / `buildExplainRequest` — pure functions, no network.
 final class GeminiRequestTests: XCTestCase {

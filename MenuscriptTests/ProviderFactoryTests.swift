@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 @Suite("ProviderFactory")
 struct ProviderFactoryTests {
@@ -8,7 +8,7 @@ struct ProviderFactoryTests {
     // @Test): an isolated UserDefaults suite plus a throwaway keychain
     // service, so parallel tests never race on shared state.
     private let suiteName = "test.providerfactory.\(UUID().uuidString)"
-    private let service = "com.leonwong.menutranslate.tests.\(UUID().uuidString)"
+    private let service = "com.leonwong.menuscript.tests.\(UUID().uuidString)"
     private let defaults: UserDefaults
 
     init() throws {

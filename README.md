@@ -30,7 +30,7 @@ Prerequisites: Xcode 16+ (iOS 17+ deployment target), [XcodeGen](https://github.
 git clone git@github.com:LeonWTW/Menuscript.git
 cd Menuscript
 xcodegen generate
-open MenuTranslate.xcodeproj
+open Menuscript.xcodeproj
 ```
 
 Build and run (`Cmd+R`) on an iOS 17+ simulator or device. On first launch, either:
@@ -41,7 +41,7 @@ Build and run (`Cmd+R`) on an iOS 17+ simulator or device. On first launch, eith
 ### Tests
 
 ```bash
-xcodebuild test -project MenuTranslate.xcodeproj -scheme MenuTranslate \
+xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
@@ -65,7 +65,6 @@ Running one full feature slice end to end, from a fresh launch:
 These are explicitly out of scope for the current prototype — not oversights, but deferred so the core feature slice (capture → recognize/translate → order → bill → history) stays the focus of Sprint 2:
 
 - **Real-device, live-API end-to-end verification** — development so far has leaned on the mock provider and simulator; a full run with a live Gemini key on a physical device is outstanding.
-- **Technical rename of the Xcode project/bundle id** — the project, folders, and bundle id are still internally named `MenuTranslate`; renaming to match the `Menuscript` product name is planned for a later sprint (Keychain-stored API keys are tied to the current bundle id, so this needs care).
 - **Additional UI/menu languages** — only Traditional Chinese and English are supported today; broader language coverage is future scope, not a limitation on who the app is meant to serve.
 - **Itemized (unequal) bill splitting and tip calculators** — the current split is always even ("AA") across diners.
 - **Offline-first recognition** — the app requires network access to reach the LLM provider; there's no on-device recognition fallback.
@@ -80,7 +79,7 @@ These are explicitly out of scope for the current prototype — not oversights, 
 
 ## Setup Notes
 
-- This project uses XcodeGen — the `.xcodeproj` is generated from `project.yml`, not committed. Re-run `xcodegen generate` after pulling changes to `project.yml`. (The Xcode project, folders, and bundle id are still internally named `MenuTranslate` — see Intentionally Deferred Features above.)
+- This project uses XcodeGen — the `.xcodeproj` is generated from `project.yml`, not committed. Re-run `xcodegen generate` after pulling changes to `project.yml`. (The project, folders, and bundle id were renamed from the original working name `MenuTranslate` to `Menuscript` during Sprint 2 — the bundle id is now `com.leonwong.menuscript`. A Keychain-stored API key from a build under the old bundle id is not carried over; re-enter it in Settings after updating.)
 - The vision/translation provider sits behind a small protocol (`MenuVisionProvider`) selected at runtime by `ProviderFactory`: the real `GeminiProvider`, or `MockVisionProvider` for offline development and demos — controlled by the mock-provider toggle in Settings.
 - Currency conversion goes through `FXService`, which calls the free [Frankfurter](https://frankfurter.dev) API and falls back to the last cached rate (or a manual override) if the network call fails.
 - Secrets never touch source or `UserDefaults`: the Gemini API key lives only in the iOS Keychain (`KeychainStore`), entered by the user at runtime.

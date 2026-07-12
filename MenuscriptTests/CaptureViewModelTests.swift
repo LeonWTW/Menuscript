@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import SwiftData
 import UIKit
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// A `MenuVisionProvider` that always fails, used to exercise the error path
 /// without any network dependency.
@@ -142,7 +142,7 @@ struct CaptureViewModelTests {
     func missingAPIKeySetsNeedsAPIKey() async throws {
         UserDefaults.standard.set(false, forKey: SettingsKeys.useMockProvider)
         let context = try makeContext()
-        let emptyKeychain = KeychainStore(service: "com.leonwong.menutranslate.tests.\(UUID().uuidString)")
+        let emptyKeychain = KeychainStore(service: "com.leonwong.menuscript.tests.\(UUID().uuidString)")
         let viewModel = CaptureViewModel(modelContext: context, keychainStore: emptyKeychain)
         viewModel.addPhotos([makeDemoImage()])
 

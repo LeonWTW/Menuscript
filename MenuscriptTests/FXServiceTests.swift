@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// Intercepts URLSession traffic so FXServiceTests never touches the network.
 private final class MockURLProtocol: URLProtocol {

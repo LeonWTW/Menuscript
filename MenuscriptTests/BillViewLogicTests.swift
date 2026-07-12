@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// Tests the exact `BillMath` compositions `BillView` uses to derive its
 /// numbers: order lines → subtotal → total → per-person, and

@@ -8,13 +8,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MenuTranslate"
+            "value" : "Menuscript"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MenuTranslate"
+            "value" : "Menuscript"
           }
         }
       }

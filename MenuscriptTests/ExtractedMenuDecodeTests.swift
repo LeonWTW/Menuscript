@@ -1,5 +1,5 @@
 import XCTest
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// Tests for `GeminiProvider.parseExtractResponse` — pure function, no network.
 final class ExtractedMenuDecodeTests: XCTestCase {

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 // MARK: - Catalog completeness
 
@@ -11,12 +11,12 @@ import Testing
 @Suite("String catalog completeness")
 struct StringCatalogTests {
     private static let catalogPaths = [
-        "MenuTranslate/Resources/Localizable.xcstrings",
-        "MenuTranslate/Resources/InfoPlist.xcstrings",
+        "Menuscript/Resources/Localizable.xcstrings",
+        "Menuscript/Resources/InfoPlist.xcstrings",
     ]
 
     private static func repoRoot() -> URL {
-        // #filePath = <repo>/MenuTranslateTests/LocalizationTests.swift
+        // #filePath = <repo>/MenuscriptTests/LocalizationTests.swift
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()

@@ -9,7 +9,7 @@ struct KeychainStore: Sendable {
 
     private let service: String
 
-    init(service: String = "com.leonwong.menutranslate") {
+    init(service: String = "com.leonwong.menuscript") {
         self.service = service
     }
 

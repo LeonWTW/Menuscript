@@ -4,16 +4,14 @@ This document records a hands-on run of the app in the iOS Simulator, on top of 
 
 ## Scope & Environment
 
-- **Date:** 2026-07-11
+- **Date:** 2026-07-10
 - **Branch:** `sprint-2-prototype`
 - **Simulator:** iPhone 17, iOS 26.3 (runtime build 23D8133)
 - **Xcode:** 26.3 (build 17C529)
-- **Bundle ID:** `com.leonwong.menutranslate`
+- **Bundle ID:** `com.leonwong.menutranslate` *(historical — this pass ran before the project was renamed; the project, scheme, and bundle id are now `Menuscript` / `com.leonwong.menuscript`, so to reproduce today substitute those names in the commands below)*
 - **Build:** `xcodegen generate` → `xcodebuild build -project MenuTranslate.xcodeproj -scheme MenuTranslate -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug` — **BUILD SUCCEEDED**
 - **Mock provider:** toggled per action below via the `-settings.useMockProvider YES|NO` launch argument (no live Gemini API key was entered into Keychain for this pass — the Settings screen's API key field showed only its empty placeholder throughout)
 - **Automation channel used:** the app's existing `#if DEBUG` auto-demo scaffolding (`RootView.swift`, `MenuView.swift`) driven entirely by launch arguments — `-autoDemo YES [-autoDemoScreen bill|explain|settings] [-settings.appLanguage en|zh-Hant] [-settings.useMockProvider YES|NO]`. This does not exist to fake results; it lets the mock-provider path (deterministic sample menu, no network) be exercised head-lessly via `simctl`, without hand-driving the camera/photo-picker UI that `simctl` cannot script.
-- **Automated test baseline (cited, not re-run by this pass):** 46 tests across 12 suites, all passing — `Test run with 46 tests in 12 suites passed after 2.347 seconds` (`xcodebuild test`, same destination). Full run included the new `SettingsKeysTests` suite (4 tests, fix 2) and `CaptureViewModelTests`/`FXServiceTests` unaffected by either fix. `** TEST SUCCEEDED **`.
-- All screenshots referenced below were saved to a local scratchpad directory during this session, not committed to the repository.
 
 ## Actions Performed
 
@@ -69,14 +67,3 @@ None of items 1–4 block the feature slice from running end to end; they are do
 ## Engineering Conclusion
 
 The Sprint 2 feature slice (Capture → Menu → Bill → History) runs correctly end to end on iPhone 17 / iOS 26.3 with the mock provider, including FX conversion against a live rate, bill math (surcharge, AA split), and persistence across process relaunches. Both AI-review fixes hold up under direct UI observation as far as the simulator's scriptable surface allows: fix 2 (English-UI default target language) is fully confirmed by screenshot; fix 1 (ExplainSheet config-error escape hatch) is confirmed on its happy path and confirmed by code + the existing `ProviderFactoryTests` suite on its error branch, but not by a direct screenshot of the error UI itself, because reaching it requires a UI tap that `simctl` cannot script and this sandboxed session's automation tools (`osascript`, `cliclick`) both lack the Accessibility permission needed to drive the Simulator window. This is a verification-tooling limitation, not a discovered app defect. The four issues above are all pre-existing minor rough edges independently re-confirmed by reading the current diff, not new regressions introduced by this verification pass, and none of them prevent the feature slice from being run, explained, or reviewed.
-
-## Pending Verification
-
-- **Real device + real Gemini API key end-to-end test: not done.** Everything in this document was run against the mock provider (or, for the config-error check, with no provider configured at all) on the iOS Simulator. No live Gemini `generateContent` call, no physical camera capture, and no physical-device run have been exercised in this pass. *(Leon: paste your real-device + live-key run results here.)*
-
-  ```
-  [Leon to fill in: device model, iOS version, date, API key source, screenshots/notes from the real Gemini recognition + explain flow]
-  ```
-
-- **`ExplainSheet`'s config-error UI (fix 1's error branch) was not directly screenshotted.** Two tooling approaches were tried and both failed for the same root cause (no Accessibility permission for host-side UI automation in this sandboxed session): `osascript`/System Events (`-1719 not allowed assistive access`) and `cliclick` (`Accessibility privileges not enabled`, confirmed by a before/after screenshot showing no change). This is covered instead by: (a) direct code inspection of `ExplainSheet.fetchExplanation()`, which deterministically sets `isConfigError = true` when `ProviderFactory.resolve()` returns `nil`; (b) `MenuTranslateTests/ProviderFactoryTests.swift`'s `"Mock toggle off with no stored key resolves to nil"` test, which is exactly that precondition; and (c) action 8 above, which confirms the app does not crash or hang when mock is off and no key is stored. A screenshot of the actual "去 Settings" button rendering under this condition is still outstanding — either grant Accessibility permission to the automation host and re-run action 9, or manually tap through History → a session → a dish's info icon with mock off and no key on a real simulator/device session.
-- **Dynamic Type at AX3+ and FX-rate-source-in-UI** (`docs/ai-implementation-review.md`'s postponed issues 3 and 4) were out of scope for this pass and remain unverified, consistent with that document.

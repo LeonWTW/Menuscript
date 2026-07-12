@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import SwiftData
-@testable import MenuTranslate
+@testable import Menuscript
 
 @MainActor
 @Suite("HistoryDelete")

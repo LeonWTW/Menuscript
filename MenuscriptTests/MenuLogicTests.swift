@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 @Suite("MenuLogic")
 struct MenuLogicTests {

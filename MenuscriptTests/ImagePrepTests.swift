@@ -1,6 +1,6 @@
 import Testing
 import UIKit
-@testable import MenuTranslate
+@testable import Menuscript
 
 @Suite
 struct ImagePrepTests {

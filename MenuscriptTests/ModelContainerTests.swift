@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import SwiftData
-@testable import MenuTranslate
+@testable import Menuscript
 
 @Suite("ModelContainer")
 struct ModelContainerTests {

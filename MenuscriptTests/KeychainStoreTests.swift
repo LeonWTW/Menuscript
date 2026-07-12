@@ -1,5 +1,5 @@
 import XCTest
-@testable import MenuTranslate
+@testable import Menuscript
 
 final class KeychainStoreTests: XCTestCase {
     private var store: KeychainStore!
@@ -9,7 +9,7 @@ final class KeychainStoreTests: XCTestCase {
         super.setUp()
         // Unique service namespace per test run so tests never collide with
         // each other or with any real stored data.
-        let service = "com.leonwong.menutranslate.tests.\(UUID().uuidString)"
+        let service = "com.leonwong.menuscript.tests.\(UUID().uuidString)"
         store = KeychainStore(service: service)
     }
 

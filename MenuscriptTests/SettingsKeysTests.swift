@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MenuTranslate
+@testable import Menuscript
 
 /// Covers `SettingsKeys.defaultTargetLanguage`: the fallback used only when
 /// the user has never explicitly chosen a target language. Every case here
