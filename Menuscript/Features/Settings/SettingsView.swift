@@ -12,6 +12,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.geminiModel) private var geminiModel: String = "gemini-2.5-flash"
     @AppStorage(SettingsKeys.useMockProvider) private var useMockProvider: Bool = false
     @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw: String = "system"
+    @AppStorage(SettingsKeys.allergenPresets) private var allergenPresets: String = ""
+    @AppStorage(SettingsKeys.allergenCustom) private var allergenCustom: String = ""
 
     @State private var apiKeyInput: String = ""
     @State private var hasStoredKey: Bool = false
@@ -76,6 +78,19 @@ struct SettingsView: View {
                 Text("翻譯設定")
             } footer: {
                 Text("菜單項目會翻譯做呢個語言，例如「繁體中文」。")
+            }
+
+            Section {
+                ForEach(Allergen.allCases) { allergen in
+                    Toggle(isOn: allergenBinding(for: allergen)) {
+                        Text(allergen.displayName)
+                    }
+                }
+                TextField("自訂敏感原（逗號分隔）", text: $allergenCustom)
+            } header: {
+                Text("食物敏感")
+            } footer: {
+                Text("AI 翻譯新菜單時會標示可能含有呢啲食材嘅菜式。判斷僅供參考，未必準確，落單前請務必同餐廳確認。設定只影響之後新辨識嘅菜單。")
             }
 
             Section {
@@ -166,6 +181,23 @@ struct SettingsView: View {
         case .english:
             Text(verbatim: "English")
         }
+    }
+
+    /// Toggle binding that inserts/removes an allergen slug in the
+    /// comma-joined `allergenPresets` `@AppStorage` string.
+    private func allergenBinding(for allergen: Allergen) -> Binding<Bool> {
+        Binding(
+            get: { Allergen.selectedSlugs(allergenPresets).contains(allergen.rawValue) },
+            set: { isOn in
+                var slugs = Allergen.selectedSlugs(allergenPresets)
+                if isOn {
+                    slugs.insert(allergen.rawValue)
+                } else {
+                    slugs.remove(allergen.rawValue)
+                }
+                allergenPresets = Allergen.serialize(slugs)
+            }
+        )
     }
 
     private func refreshKeyState() {

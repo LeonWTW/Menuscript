@@ -8,6 +8,8 @@ struct ExtractedMenu: Codable, Equatable, Sendable {
         var priceNote: String?
         var category: String
         var lowConfidence: Bool
+        var summary: String? = nil
+        var possibleAllergens: [String] = []
     }
     var detectedLanguage: String   // human-readable, e.g. "日文"
     var menuCurrency: String       // ISO 4217, e.g. "JPY"
@@ -45,6 +47,6 @@ enum VisionProviderError: Error, LocalizedError, Equatable {
 }
 
 protocol MenuVisionProvider: Sendable {
-    func extractMenu(images: [Data], targetLanguage: String) async throws -> ExtractedMenu
+    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String
 }

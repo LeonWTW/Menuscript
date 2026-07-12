@@ -7,7 +7,7 @@ import UIKit
 /// A `MenuVisionProvider` that always fails, used to exercise the error path
 /// without any network dependency.
 private struct FailingVisionProvider: MenuVisionProvider {
-    func extractMenu(images: [Data], targetLanguage: String) async throws -> ExtractedMenu {
+    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         throw VisionProviderError.rateLimited
     }
 
@@ -19,13 +19,34 @@ private struct FailingVisionProvider: MenuVisionProvider {
 /// A `MenuVisionProvider` whose `extractMenu` sleeps long enough for a test
 /// to cancel it mid-flight, used to exercise cooperative cancellation.
 private struct SlowVisionProvider: MenuVisionProvider {
-    func extractMenu(images: [Data], targetLanguage: String) async throws -> ExtractedMenu {
+    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         try await Task.sleep(nanoseconds: 2_000_000_000)
         return ExtractedMenu(
             detectedLanguage: "日文",
             menuCurrency: "JPY",
             restaurantName: nil,
             items: [ExtractedMenu.Item(original: "test", translated: "test", price: Decimal(100), priceNote: nil, category: "測試", lowConfidence: false)]
+        )
+    }
+
+    func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
+        "explanation"
+    }
+}
+
+/// A `MenuVisionProvider` returning a fixed two-item menu whose items carry
+/// `summary` and `possibleAllergens`, used to verify those per-dish fields
+/// persist onto `MenuItem` and that the session snapshots the allergen profile.
+private struct AllergenVisionProvider: MenuVisionProvider {
+    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
+        ExtractedMenu(
+            detectedLanguage: "日文",
+            menuCurrency: "JPY",
+            restaurantName: "測試",
+            items: [
+                ExtractedMenu.Item(original: "唐揚げ", translated: "日式炸雞", price: Decimal(650), priceNote: nil, category: "燒烤", lowConfidence: false, summary: "外脆內嫩嘅炸雞", possibleAllergens: ["wheat", "soy"]),
+                ExtractedMenu.Item(original: "焼きなす", translated: "烤茄子", price: Decimal(500), priceNote: nil, category: "燒烤", lowConfidence: false, summary: "炭烤茄子", possibleAllergens: [])
+            ]
         )
     }
 
@@ -42,7 +63,9 @@ struct CaptureViewModelTests {
         SettingsKeys.homeCurrency,
         SettingsKeys.geminiModel,
         SettingsKeys.useMockProvider,
-        SettingsKeys.appLanguage
+        SettingsKeys.appLanguage,
+        SettingsKeys.allergenPresets,
+        SettingsKeys.allergenCustom
     ]
 
     init() {
@@ -170,5 +193,31 @@ struct CaptureViewModelTests {
         #expect(viewModel.needsAPIKey == true)
         #expect(viewModel.completedSession == nil)
         #expect(viewModel.isRecognizing == false)
+    }
+
+    @Test("Recognition persists per-dish summary and possibleAllergens, and snapshots the session allergen profile")
+    func recognitionPersistsAllergenFieldsAndProfile() async throws {
+        // Seed allergen settings via the same UserDefaults path init() resets;
+        // home currency matches the mock menu currency so recognize() skips the
+        // FX network lookup and the test stays hermetic.
+        UserDefaults.standard.set("wheat,soy", forKey: SettingsKeys.allergenPresets)
+        UserDefaults.standard.set("香菜", forKey: SettingsKeys.allergenCustom)
+        UserDefaults.standard.set("JPY", forKey: SettingsKeys.homeCurrency)
+
+        let context = try makeContext()
+        let viewModel = CaptureViewModel(modelContext: context, provider: AllergenVisionProvider())
+        viewModel.addPhotos([makeDemoImage()])
+
+        await viewModel.recognize()
+
+        let session = try #require(viewModel.completedSession)
+        #expect(session.allergenProfile == ["wheat", "soy", "香菜"])
+
+        let orderedItems = session.items.sorted { $0.sortOrder < $1.sortOrder }
+        #expect(orderedItems.count == 2)
+        #expect(orderedItems[0].summary == "外脆內嫩嘅炸雞")
+        #expect(orderedItems[0].possibleAllergens == ["wheat", "soy"])
+        #expect(orderedItems[1].summary == "炭烤茄子")
+        #expect(orderedItems[1].possibleAllergens == [])
     }
 }

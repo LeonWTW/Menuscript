@@ -76,6 +76,12 @@ final class CaptureViewModel: Identifiable {
             SettingsKeys.targetLanguage, from: defaults, default: SettingsKeys.defaultTargetLanguage()
         )
         let homeCurrency = SettingsKeys.nonEmptyString(SettingsKeys.homeCurrency, from: defaults, default: "USD")
+        // Free-text / comma-joined settings: read raw — an empty value is a
+        // valid "no allergens" state, not a fall-back-to-default like the reads above.
+        let allergens = Allergen.parse(
+            presets: defaults.string(forKey: SettingsKeys.allergenPresets) ?? "",
+            custom: defaults.string(forKey: SettingsKeys.allergenCustom) ?? ""
+        )
 
         let provider: MenuVisionProvider
         if let injectedProvider {
@@ -95,7 +101,7 @@ final class CaptureViewModel: Identifiable {
             let imageData = await Task.detached(priority: .userInitiated) { [recognizedPhotos] in
                 recognizedPhotos.compactMap { ImagePrep.jpegData(from: $0) }
             }.value
-            let extracted = try await provider.extractMenu(images: imageData, targetLanguage: targetLanguage)
+            let extracted = try await provider.extractMenu(images: imageData, targetLanguage: targetLanguage, allergens: allergens)
             guard !Task.isCancelled else { return }
 
             let fxRate: FXRate?
@@ -115,6 +121,8 @@ final class CaptureViewModel: Identifiable {
                     priceNote: item.priceNote,
                     category: item.category,
                     lowConfidence: item.lowConfidence,
+                    summary: item.summary,
+                    possibleAllergens: item.possibleAllergens,
                     quantity: 0,
                     sortOrder: index
                 )
@@ -130,6 +138,7 @@ final class CaptureViewModel: Identifiable {
                 fxRateDate: fxRate?.date,
                 fxSource: fxRate?.source.persistedValue,
                 photos: imageData,
+                allergenProfile: allergens,
                 items: items
             )
 

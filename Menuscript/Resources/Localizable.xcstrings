@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "zh-Hant",
   "strings" : {
+    "、" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", "
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "、"
+          }
+        }
+      }
+    },
     "，%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14,6 +30,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "，%@"
+          }
+        }
+      }
+    },
+    "，可能含有 %@，請與餐廳確認" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", may contain %@; please confirm with the restaurant"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，可能含有 %@，請與餐廳確認"
           }
         }
       }
@@ -454,6 +486,38 @@
         }
       }
     },
+    "AI 推測僅供參考，落單前請務必同餐廳確認。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI guesses are advisory only; always confirm with the restaurant before ordering."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 推測僅供參考，落單前請務必同餐廳確認。"
+          }
+        }
+      }
+    },
+    "AI 翻譯新菜單時會標示可能含有呢啲食材嘅菜式。判斷僅供參考，未必準確，落單前請務必同餐廳確認。設定只影響之後新辨識嘅菜單。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When AI translates a new menu, it flags dishes that may contain these ingredients. This is advisory only and may be inaccurate, so always confirm with the restaurant before ordering. This setting only affects newly recognized menus."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 翻譯新菜單時會標示可能含有呢啲食材嘅菜式。判斷僅供參考，未必準確，落單前請務必同餐廳確認。設定只影響之後新辨識嘅菜單。"
+          }
+        }
+      }
+    },
     "Gemini API" : {
       "localizations" : {
         "en" : {
@@ -705,6 +769,22 @@
         }
       }
     },
+    "可能含有敏感原" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "May Contain Allergens"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可能含有敏感原"
+          }
+        }
+      }
+    },
     "呢個操作無法還原。" : {
       "localizations" : {
         "en" : {
@@ -821,6 +901,38 @@
         }
       }
     },
+    "大豆" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soy"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大豆"
+          }
+        }
+      }
+    },
+    "奶" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milk"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "奶"
+          }
+        }
+      }
+    },
     "好" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -868,6 +980,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "小計"
+          }
+        }
+      }
+    },
+    "小麥" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wheat"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小麥"
           }
         }
       }
@@ -1057,6 +1185,22 @@
         }
       }
     },
+    "搵菜式相片" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search dish photos"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搵菜式相片"
+          }
+        }
+      }
+    },
     "攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1070,6 +1214,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入"
+          }
+        }
+      }
+    },
+    "敏感原警示根據辨識當時嘅設定，僅供參考，落單前請同餐廳確認。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allergen warnings reflect the settings at the time of recognition and are advisory only; please confirm with the restaurant before ordering."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "敏感原警示根據辨識當時嘅設定，僅供參考，落單前請同餐廳確認。"
           }
         }
       }
@@ -1260,6 +1420,22 @@
         }
       }
     },
+    "樹果仁" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tree Nuts"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "樹果仁"
+          }
+        }
+      }
+    },
     "此分類沒有菜式" : {
       "localizations" : {
         "en" : {
@@ -1445,6 +1621,22 @@
         }
       }
     },
+    "無法建立搜尋連結" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't create a search link"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法建立搜尋連結"
+          }
+        }
+      }
+    },
     "版本 %@" : {
       "localizations" : {
         "en" : {
@@ -1473,6 +1665,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用嚟顯示匯率換算後嘅價錢。清單冇你想要嘅貨幣可以喺下面手動輸入 ISO 代碼，例如 THB。"
+          }
+        }
+      }
+    },
+    "甲殼類海鮮" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crustacean Shellfish"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "甲殼類海鮮"
           }
         }
       }
@@ -1540,6 +1748,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "相簿"
+          }
+        }
+      }
+    },
+    "確定" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確定"
           }
         }
       }
@@ -1729,6 +1953,22 @@
         }
       }
     },
+    "自訂敏感原（逗號分隔）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom allergens (comma-separated)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自訂敏感原（逗號分隔）"
+          }
+        }
+      }
+    },
     "自訂貨幣代碼" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1759,6 +1999,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "至 (例如 HKD)"
+          }
+        }
+      }
+    },
+    "芝麻" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesame"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "芝麻"
+          }
+        }
+      }
+    },
+    "花生" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peanut"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "花生"
           }
         }
       }
@@ -1826,6 +2098,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "菜單項目會翻譯做呢個語言，例如「繁體中文」。"
+          }
+        }
+      }
+    },
+    "蛋" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Egg"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蛋"
+          }
+        }
+      }
+    },
+    "軟體動物" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Molluscs"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軟體動物"
           }
         }
       }
@@ -2122,6 +2426,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "非 HTTP 回應"
+          }
+        }
+      }
+    },
+    "顯示敏感原警告" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show allergen warning"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示敏感原警告"
+          }
+        }
+      }
+    },
+    "食物敏感" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food Allergies"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "食物敏感"
+          }
+        }
+      }
+    },
+    "魚" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fish"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "魚"
+          }
+        }
+      }
+    },
+    "麩質" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gluten"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麩質"
           }
         }
       }

@@ -16,6 +16,7 @@ final class MenuSession {
     @Attribute(.externalStorage) var photos: [Data]
     var peopleCount: Int
     var surchargePercent: Double
+    var allergenProfile: [String] = []
 
     @Relationship(deleteRule: .cascade, inverse: \MenuItem.session)
     var items: [MenuItem]
@@ -44,6 +45,7 @@ final class MenuSession {
         photos: [Data] = [],
         peopleCount: Int = 2,
         surchargePercent: Double = 0,
+        allergenProfile: [String] = [],
         items: [MenuItem] = []
     ) {
         self.id = id
@@ -59,6 +61,7 @@ final class MenuSession {
         self.photos = photos
         self.peopleCount = peopleCount
         self.surchargePercent = surchargePercent
+        self.allergenProfile = allergenProfile
         self.items = items
     }
 }

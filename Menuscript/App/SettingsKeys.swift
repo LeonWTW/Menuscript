@@ -6,6 +6,8 @@ enum SettingsKeys {
     static let geminiModel = "settings.geminiModel"           // String, default "gemini-2.5-flash"
     static let useMockProvider = "settings.useMockProvider"   // Bool, default false
     static let appLanguage = "settings.appLanguage"           // String: "system" | "zh-Hant" | "en", default "system"
+    static let allergenPresets = "settings.allergenPresets"   // String, comma-joined Allergen slugs, default ""
+    static let allergenCustom = "settings.allergenCustom"     // String, free-text custom allergens, default ""
 
     /// Default `targetLanguage` for a user who has never chosen one.
     /// Follows the effective app UI language instead of always defaulting to
