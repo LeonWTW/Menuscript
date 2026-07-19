@@ -6,6 +6,7 @@ import SwiftUI
 /// so the app can be demoed without a real API key (BYOK).
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
 
     @AppStorage(SettingsKeys.targetLanguage) private var targetLanguage: String = SettingsKeys.defaultTargetLanguage()
     @AppStorage(SettingsKeys.homeCurrency) private var homeCurrency: String = "USD"
@@ -15,24 +16,36 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.allergenPresets) private var allergenPresets: String = ""
     @AppStorage(SettingsKeys.allergenCustom) private var allergenCustom: String = ""
 
-    @State private var apiKeyInput: String = ""
-    @State private var hasStoredKey: Bool = false
-    @State private var keychainError: String?
+    @State private var apiKeyState: APIKeySettingsModel
 
     @State private var fxFromCode: String = ""
     @State private var fxToCode: String = ""
     @State private var fxRateInput: String = ""
     @State private var showDeleteAllConfirm = false
+    @State private var persistenceErrorMessage: String?
 
-    private let keychainStore = KeychainStore()
-    private let fxService = FXService()
+    private let fxOverrideStore: any FXManualOverrideStoring
+    private let onDeleteAllSucceeded: () -> Void
     private let commonCurrencies = ["USD", "HKD", "TWD", "JPY", "EUR", "GBP", "CNY"]
 
     private var appVersionString: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
     }
 
+    init(
+        secretStore: any SecretStore = KeychainStore(),
+        fxOverrideStore: any FXManualOverrideStoring = FXManualOverrideStore(),
+        onDeleteAllSucceeded: @escaping () -> Void = {}
+    ) {
+        _apiKeyState = State(
+            initialValue: APIKeySettingsModel(secretStore: secretStore)
+        )
+        self.fxOverrideStore = fxOverrideStore
+        self.onDeleteAllSucceeded = onDeleteAllSucceeded
+    }
+
     var body: some View {
+        @Bindable var keyState = apiKeyState
         Form {
             Section {
                 Picker("語言", selection: $appLanguageRaw) {
@@ -45,23 +58,23 @@ struct SettingsView: View {
             }
 
             Section {
-                SecureField("Gemini API Key", text: $apiKeyInput)
-                if hasStoredKey {
+                SecureField("Gemini API Key", text: $keyState.input)
+                if keyState.hasStoredKey {
                     Label("已設定 ✓", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.footnote)
                 }
-                if let keychainError {
+                if let keychainError = keyState.errorMessage {
                     Label(keychainError, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.footnote)
                 }
                 HStack {
-                    Button("儲存") { saveAPIKey() }
-                        .disabled(apiKeyInput.isEmpty)
+                    Button("儲存") { keyState.save() }
+                        .disabled(keyState.input.isEmpty)
                     Spacer()
-                    Button("清除", role: .destructive) { clearAPIKey() }
-                        .disabled(!hasStoredKey)
+                    Button("清除", role: .destructive) { keyState.delete() }
+                        .disabled(!keyState.hasStoredKey)
                 }
                 TextField("模型名稱", text: $geminiModel)
                     .autocorrectionDisabled()
@@ -69,7 +82,7 @@ struct SettingsView: View {
             } header: {
                 Text("Gemini API")
             } footer: {
-                Text("需要自備 Gemini API Key（BYOK）先可以使用真實辨識功能。API Key 只會儲存喺裝置嘅 Keychain 入面，唔會上傳到第三方伺服器。")
+                Text("需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。")
             }
 
             Section {
@@ -168,7 +181,12 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("設定")
-        .onAppear(perform: refreshKeyState)
+        .onAppear { apiKeyState.refresh() }
+        .alert("清除全部菜單記錄", isPresented: persistenceErrorBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(persistenceErrorMessage ?? "")
+        }
     }
 
     @ViewBuilder
@@ -200,29 +218,6 @@ struct SettingsView: View {
         )
     }
 
-    private func refreshKeyState() {
-        let stored = keychainStore.get(KeychainStore.geminiAPIKey)
-        hasStoredKey = !(stored?.isEmpty ?? true)
-    }
-
-    private func saveAPIKey() {
-        guard !apiKeyInput.isEmpty else { return }
-        do {
-            try keychainStore.set(apiKeyInput, forKey: KeychainStore.geminiAPIKey)
-            keychainError = nil
-        } catch {
-            keychainError = error.localizedDescription
-        }
-        apiKeyInput = ""
-        refreshKeyState()
-    }
-
-    private func clearAPIKey() {
-        try? keychainStore.delete(KeychainStore.geminiAPIKey)
-        apiKeyInput = ""
-        refreshKeyState()
-    }
-
     private var isValidFXOverrideInput: Bool {
         guard let rate = Double(fxRateInput), rate.isFinite, rate > 0 else { return false }
         return isValidCurrencyCode(fxFromCode) && isValidCurrencyCode(fxToCode)
@@ -235,21 +230,36 @@ struct SettingsView: View {
 
     private func saveFXOverride() {
         guard isValidFXOverrideInput, let rate = Double(fxRateInput) else { return }
-        fxService.setManualOverride(rate, from: fxFromCode, to: fxToCode)
+        fxOverrideStore.setManualOverride(rate, from: fxFromCode, to: fxToCode)
     }
 
     private func clearFXOverride() {
         guard !fxFromCode.isEmpty, !fxToCode.isEmpty else { return }
-        fxService.setManualOverride(nil, from: fxFromCode, to: fxToCode)
+        fxOverrideStore.setManualOverride(nil, from: fxFromCode, to: fxToCode)
         fxRateInput = ""
     }
 
+    private var persistenceErrorBinding: Binding<Bool> {
+        Binding(
+            get: { persistenceErrorMessage != nil },
+            set: { if !$0 { persistenceErrorMessage = nil } }
+        )
+    }
+
     private func deleteAllSessions() {
-        guard let allSessions = try? modelContext.fetch(FetchDescriptor<MenuSession>()) else { return }
-        for session in allSessions {
-            modelContext.delete(session)
+        do {
+            try SettingsDeleteAllFlow.perform(
+                deleteAll: {
+                    try SessionStore(context: modelContext).deleteAll()
+                },
+                dismiss: {
+                    dismiss()
+                },
+                onSucceeded: onDeleteAllSucceeded
+            )
+        } catch {
+            persistenceErrorMessage = error.localizedDescription
         }
-        try? modelContext.save()
     }
 }
 

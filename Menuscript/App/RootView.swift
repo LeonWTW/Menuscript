@@ -11,6 +11,15 @@ struct RootView: View {
     @Binding var captureViewModel: CaptureViewModel?
     @State private var showSettings = false
     @State private var showCancelCaptureConfirm = false
+    @State private var persistenceErrorMessage: String?
+
+    private var unfinishedSessions: [MenuSession] {
+        sessions.filter { !$0.isCompleted }
+    }
+
+    private var completedSessions: [MenuSession] {
+        sessions.filter(\.isCompleted)
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -27,7 +36,9 @@ struct RootView: View {
             }
             .navigationTitle("菜單記錄")
             .navigationDestination(for: MenuSession.self) { session in
-                MenuView(session: session)
+                MenuView(session: session) {
+                    navigationPath.removeAll()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -80,8 +91,16 @@ struct RootView: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
-                SettingsView()
+                SettingsView(onDeleteAllSucceeded: {
+                    showSettings = false
+                    navigationPath.removeAll()
+                })
             }
+        }
+        .alert("菜單記錄", isPresented: persistenceErrorBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(persistenceErrorMessage ?? "")
         }
         .task {
             await runAutoDemoIfNeeded()
@@ -90,17 +109,30 @@ struct RootView: View {
 
     private var historyList: some View {
         List {
+            if !unfinishedSessions.isEmpty {
+                historySection(title: "未完成", sessions: unfinishedSessions)
+            }
+            if !completedSessions.isEmpty {
+                historySection(title: "已完成", sessions: completedSessions)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.mtBackground)
+    }
+
+    private func historySection(title: LocalizedStringKey, sessions: [MenuSession]) -> some View {
+        Section(title) {
             ForEach(sessions, id: \.persistentModelID) { session in
                 NavigationLink(value: session) {
                     HistoryRow(session: session)
                 }
                 .listRowBackground(Color.mtSurface)
             }
-            .onDelete(perform: deleteSessions)
+            .onDelete { offsets in
+                deleteSessions(at: offsets, from: sessions)
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.mtBackground)
     }
 
     /// Handles the capture cover's toolbar 取消 button. While recognition is
@@ -118,11 +150,22 @@ struct RootView: View {
         }
     }
 
-    private func deleteSessions(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(sessions[index])
+    private var persistenceErrorBinding: Binding<Bool> {
+        Binding(
+            get: { persistenceErrorMessage != nil },
+            set: { if !$0 { persistenceErrorMessage = nil } }
+        )
+    }
+
+    private func deleteSessions(at offsets: IndexSet, from displayedSessions: [MenuSession]) {
+        let sessionsToDelete = offsets.compactMap { index in
+            displayedSessions.indices.contains(index) ? displayedSessions[index] : nil
         }
-        try? modelContext.save()
+        do {
+            try SessionStore(context: modelContext).delete(sessionsToDelete)
+        } catch {
+            persistenceErrorMessage = error.localizedDescription
+        }
     }
 
     #if DEBUG
@@ -171,6 +214,12 @@ private struct HistoryRow: View {
             Text("\(session.items.count) 味菜 · \(session.detectedLanguage)")
                 .font(.footnote)
                 .foregroundStyle(Color.mtTextSecondary)
+            Label(
+                session.isCompleted ? LocalizedStringKey("已完成") : LocalizedStringKey("未完成"),
+                systemImage: session.isCompleted ? "checkmark.seal.fill" : "clock.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(session.isCompleted ? Color.green : Color.mtWarning)
         }
         .padding(.vertical, 4)
     }

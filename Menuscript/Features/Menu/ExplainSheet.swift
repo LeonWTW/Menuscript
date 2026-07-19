@@ -1,5 +1,117 @@
 import SwiftUI
 
+@MainActor
+enum DishExplanationService {
+    typealias RuntimeResolver = @MainActor (RuntimeMode) throws -> RuntimeServices?
+
+    static func fetch(
+        original: String,
+        detectedLanguage: String,
+        targetLanguage: String,
+        providerMode: RuntimeMode?,
+        secretStore: any SecretStore,
+        defaults: UserDefaults,
+        liveFXFactory: RuntimeServiceResolver.LiveFXFactory,
+        runtimeResolver: RuntimeResolver? = nil
+    ) async throws -> String {
+        guard !GeminiDisclosureGate.requiresConsent(
+            explicitMode: providerMode,
+            defaults: defaults
+        ) else {
+            throw GeminiDisclosureError.consentRequired
+        }
+
+        let effectiveMode = GeminiDisclosureGate.effectiveMode(
+            explicitMode: providerMode,
+            defaults: defaults
+        )
+        let model = SettingsKeys.nonEmptyString(
+            SettingsKeys.geminiModel,
+            from: defaults,
+            default: "gemini-2.5-flash"
+        )
+        let services: RuntimeServices?
+        if let runtimeResolver {
+            services = try runtimeResolver(effectiveMode)
+        } else {
+            services = try RuntimeServiceResolver.resolve(
+                configuration: RuntimeServiceConfiguration(
+                    mode: effectiveMode,
+                    geminiModel: model
+                ),
+                secretStore: secretStore,
+                liveFXFactory: liveFXFactory
+            )
+        }
+
+        guard let services else {
+            throw VisionProviderError.missingAPIKey
+        }
+        return try await services.visionProvider.explainDish(
+            original: original,
+            language: detectedLanguage,
+            targetLanguage: targetLanguage
+        )
+    }
+
+    /// Shared cache short-circuit used by the view and focused tests. A cached
+    /// explanation never evaluates the disclosure gate or runtime resolver.
+    static func fetchIfNeeded(
+        currentExplanation: String?,
+        forceRefresh: Bool,
+        original: String,
+        detectedLanguage: String,
+        targetLanguage: String,
+        providerMode: RuntimeMode?,
+        secretStore: any SecretStore,
+        defaults: UserDefaults,
+        liveFXFactory: RuntimeServiceResolver.LiveFXFactory,
+        runtimeResolver: RuntimeResolver? = nil
+    ) async throws -> String {
+        if !forceRefresh,
+           let currentExplanation,
+           !currentExplanation.isEmpty {
+            return currentExplanation
+        }
+        return try await fetch(
+            original: original,
+            detectedLanguage: detectedLanguage,
+            targetLanguage: targetLanguage,
+            providerMode: providerMode,
+            secretStore: secretStore,
+            defaults: defaults,
+            liveFXFactory: liveFXFactory,
+            runtimeResolver: runtimeResolver
+        )
+    }
+
+    /// Action-context adapter used by `ExplainSheet`. Keeping the request
+    /// inputs together prevents a completed card from reading mutable model
+    /// names or provider provenance after the user taps it.
+    static func fetchIfNeeded(
+        currentExplanation: String?,
+        forceRefresh: Bool,
+        context: MenuItemActionContext,
+        secretStore: any SecretStore,
+        defaults: UserDefaults,
+        liveFXFactory: RuntimeServiceResolver.LiveFXFactory,
+        runtimeResolver: RuntimeResolver? = nil
+    ) async throws -> String {
+        try await fetchIfNeeded(
+            currentExplanation: currentExplanation,
+            forceRefresh: forceRefresh,
+            original: context.originalName,
+            detectedLanguage: context.detectedLanguage,
+            targetLanguage: context.targetLanguage,
+            providerMode: context.providerMode,
+            secretStore: secretStore,
+            defaults: defaults,
+            liveFXFactory: liveFXFactory,
+            runtimeResolver: runtimeResolver
+        )
+    }
+}
+
 /// Explains a single dish in the target language. Shows the cached
 /// `item.explanation` immediately when one already exists (no network call);
 /// otherwise resolves a `MenuVisionProvider` on appearance and fetches one.
@@ -8,18 +120,35 @@ import SwiftUI
 struct ExplainSheet: View {
     @Bindable private var item: MenuItem
 
+    @Environment(\.dismiss) private var dismiss
+
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var isConfigError = false
+    @State private var recoveryAction: ProviderRecoveryAction?
     @State private var showSettings = false
+    @State private var disclosureIsRequired = false
+    @State private var showDisclosure = false
 
-    init(item: MenuItem) {
+    private let secretStore: any SecretStore
+    private let defaults: UserDefaults
+    private let liveFXFactory: RuntimeServiceResolver.LiveFXFactory
+    private let actionContext: MenuItemActionContext
+    private let onDeleteAllSucceeded: () -> Void
+
+    init(
+        item: MenuItem,
+        actionContext: MenuItemActionContext? = nil,
+        secretStore: any SecretStore = KeychainStore(),
+        defaults: UserDefaults = .standard,
+        liveFXFactory: @escaping RuntimeServiceResolver.LiveFXFactory = { FXService() },
+        onDeleteAllSucceeded: @escaping () -> Void = {}
+    ) {
         self.item = item
-    }
-
-    private var targetLanguage: String {
-        item.session?.targetLanguage
-            ?? SettingsKeys.nonEmptyString(SettingsKeys.targetLanguage, from: .standard, default: "繁體中文")
+        self.secretStore = secretStore
+        self.defaults = defaults
+        self.liveFXFactory = liveFXFactory
+        self.actionContext = actionContext ?? .live(item, defaults: defaults)
+        self.onDeleteAllSucceeded = onDeleteAllSucceeded
     }
 
     private var hasCachedExplanation: Bool {
@@ -52,8 +181,24 @@ struct ExplainSheet: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
-                SettingsView()
+                SettingsView(onDeleteAllSucceeded: {
+                    dismiss()
+                    onDeleteAllSucceeded()
+                })
             }
+        }
+        .alert("傳送資料到 Google Gemini", isPresented: $showDisclosure) {
+            Button("同意並繼續") {
+                GeminiDisclosureGate.accept(defaults: defaults)
+                disclosureIsRequired = false
+                errorMessage = nil
+                Task { await fetchExplanation(forceRefresh: true) }
+            }
+            Button("取消", role: .cancel) {
+                showDisclosure = false
+            }
+        } message: {
+            Text("使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。")
         }
     }
 
@@ -61,10 +206,10 @@ struct ExplainSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(item.translatedName)
+            Text(actionContext.translatedName)
                 .font(.mtDishName)
                 .foregroundStyle(Color.mtTextPrimary)
-            Text(item.originalName)
+            Text(actionContext.originalName)
                 .font(.mtOriginalName)
                 .foregroundStyle(Color.mtTextSecondary)
         }
@@ -105,7 +250,7 @@ struct ExplainSheet: View {
                 .foregroundStyle(Color.mtTextPrimary)
                 .lineSpacing(6)
                 .textSelection(.enabled)
-            if item.lowConfidence {
+            if actionContext.lowConfidence {
                 lowConfidenceNote
             }
         }
@@ -116,17 +261,37 @@ struct ExplainSheet: View {
             Text(message)
                 .font(.body)
                 .foregroundStyle(Color.mtTextPrimary)
-            if isConfigError {
-                Button("去 Settings") {
-                    showSettings = true
+            if disclosureIsRequired {
+                Button("傳送資料到 Google Gemini") {
+                    showDisclosure = true
                 }
                 .buttonStyle(.bordered)
-            } else {
-                Button("再試一次") {
-                    Task { await fetchExplanation(forceRefresh: true) }
-                }
-                .buttonStyle(.bordered)
+            } else if let recoveryAction {
+                recoveryButton(for: recoveryAction)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func recoveryButton(for action: ProviderRecoveryAction) -> some View {
+        switch action {
+        case .openSettings:
+            Button("去 Settings") { showSettings = true }
+                .buttonStyle(.bordered)
+        case .reviewPermissions:
+            Button("檢查專案權限") { showSettings = true }
+                .buttonStyle(.bordered)
+        case .reviewBilling:
+            Button("檢查計費設定") { showSettings = true }
+                .buttonStyle(.bordered)
+        case .reviewModel:
+            Button("檢查 Model 設定") { showSettings = true }
+                .buttonStyle(.bordered)
+        case .retry:
+            Button("再試一次") {
+                Task { await fetchExplanation(forceRefresh: true) }
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -152,29 +317,37 @@ struct ExplainSheet: View {
         guard forceRefresh || !hasCachedExplanation else { return }
 
         errorMessage = nil
-        isConfigError = false
+        recoveryAction = nil
+        disclosureIsRequired = false
         isLoading = true
         defer { isLoading = false }
 
-        guard let provider = ProviderFactory.resolve() else {
-            errorMessage = L10n.string("未設定 API key，去 Settings 設定先用得解釋功能")
-            isConfigError = true
-            return
-        }
-
         do {
-            let result = try await provider.explainDish(
-                original: item.originalName,
-                language: item.session?.detectedLanguage ?? "",
-                targetLanguage: targetLanguage
+            let result = try await DishExplanationService.fetchIfNeeded(
+                currentExplanation: item.explanation,
+                forceRefresh: forceRefresh,
+                context: actionContext,
+                secretStore: secretStore,
+                defaults: defaults,
+                liveFXFactory: liveFXFactory
             )
             guard !Task.isCancelled else { return }
             item.explanation = result
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = (error as? VisionProviderError)?.errorDescription ?? error.localizedDescription
-            if case .missingAPIKey = error as? VisionProviderError {
-                isConfigError = true
+            if error as? GeminiDisclosureError == .consentRequired {
+                errorMessage = L10n.string("使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。")
+                disclosureIsRequired = true
+                showDisclosure = true
+            } else if let providerError = error as? VisionProviderError {
+                errorMessage = providerError.errorDescription
+                recoveryAction = providerError.recoveryAction
+            } else if let keychainError = error as? KeychainError {
+                errorMessage = keychainError.errorDescription
+                recoveryAction = .retry
+            } else {
+                errorMessage = L10n.string("菜式解釋暫時失敗，請再試一次。")
+                recoveryAction = .retry
             }
         }
     }

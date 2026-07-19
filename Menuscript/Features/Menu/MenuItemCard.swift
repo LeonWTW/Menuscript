@@ -8,12 +8,23 @@ struct MenuItemCard: View {
     let menuCurrency: String
     let homeCurrency: String
     let fxRate: Double?
-    var onExplain: (MenuItem) -> Void
-    var onPhotoSearch: (MenuItem) -> Void
+    var presentation: MenuItemCardPresentation? = nil
+    var isQuantityReadOnly: Bool = false
+    var actionContext: MenuItemActionContext? = nil
+    var onExplain: (MenuItemActionContext) -> Void
+    var onPhotoSearch: (MenuItemActionContext) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @State private var showAllergenAlert = false
+
+    private var display: MenuItemCardPresentation {
+        presentation ?? .live(item, isQuantityReadOnly: isQuantityReadOnly)
+    }
+
+    private var resolvedActionContext: MenuItemActionContext {
+        actionContext ?? .live(item)
+    }
 
     var body: some View {
         cardBody
@@ -59,7 +70,7 @@ struct MenuItemCard: View {
     private var nameBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(item.translatedName)
+                Text(display.translatedName)
                     .font(.mtDishName)
                     .foregroundStyle(Color.mtTextPrimary)
                     .lineLimit(2)
@@ -73,7 +84,7 @@ struct MenuItemCard: View {
                     allergenButton
                 }
             }
-            Text(item.originalName)
+            Text(display.originalName)
                 .font(.mtOriginalName)
                 .foregroundStyle(Color.mtTextSecondary)
                 .lineLimit(2)
@@ -83,6 +94,11 @@ struct MenuItemCard: View {
                     .font(.footnote)
                     .foregroundStyle(Color.mtTextSecondary)
                     .lineLimit(2)
+            }
+            if display.isInCompletedOrder == false {
+                Text("未有加入已完成訂單")
+                    .font(.footnote)
+                    .foregroundStyle(Color.mtTextSecondary)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -109,7 +125,7 @@ struct MenuItemCard: View {
 
     private var photoButton: some View {
         Button {
-            onPhotoSearch(item)
+            onPhotoSearch(resolvedActionContext)
         } label: {
             Image(systemName: "photo")
                 .font(.body)
@@ -123,7 +139,7 @@ struct MenuItemCard: View {
 
     private var explainButton: some View {
         Button {
-            onExplain(item)
+            onExplain(resolvedActionContext)
         } label: {
             Image(systemName: "info.circle")
                 .font(.body)
@@ -142,14 +158,27 @@ struct MenuItemCard: View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 12) {
                 priceBlock
-                QuantityStepper(value: $item.quantity)
+                quantityControl
             }
         } else {
             HStack(alignment: .center) {
                 priceBlock
                 Spacer()
-                QuantityStepper(value: $item.quantity)
+                quantityControl
             }
+        }
+    }
+
+    @ViewBuilder
+    private var quantityControl: some View {
+        if display.isQuantityReadOnly {
+            Text(verbatim: "×\(display.quantity)")
+                .font(Font.mtChip.monospacedDigit())
+                .foregroundStyle(Color.mtTextPrimary)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel(L10n.string("數量") + " \(display.quantity)")
+        } else {
+            QuantityStepper(value: $item.quantity)
         }
     }
 
@@ -158,7 +187,7 @@ struct MenuItemCard: View {
     @ViewBuilder
     private var priceBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if let priceValue = item.priceValue {
+            if let priceValue = display.unitPrice {
                 if let fxRate {
                     Text("≈ \(CurrencyFormat.format(BillMath.converted(priceValue, rate: fxRate), code: homeCurrency))")
                         .font(.mtPrice)
@@ -172,7 +201,7 @@ struct MenuItemCard: View {
                         .foregroundStyle(Color.mtPriceConverted)
                 }
             } else {
-                Text(item.priceNote ?? L10n.string("時價"))
+                Text(display.priceNote ?? L10n.string("時價"))
                     .font(.mtDishName)
                     .foregroundStyle(Color.mtTextPrimary)
             }
@@ -181,8 +210,8 @@ struct MenuItemCard: View {
     }
 
     private var accessibilitySummary: String {
-        var text = L10n.string("%@，原文 %@", item.translatedName, item.originalName)
-        if let priceValue = item.priceValue {
+        var text = L10n.string("%@，原文 %@", display.translatedName, display.originalName)
+        if let priceValue = display.unitPrice {
             if let fxRate {
                 let converted = CurrencyFormat.format(BillMath.converted(priceValue, rate: fxRate), code: homeCurrency)
                 let original = CurrencyFormat.format(priceValue, code: menuCurrency)
@@ -191,7 +220,7 @@ struct MenuItemCard: View {
                 text += L10n.string("，%@", CurrencyFormat.format(priceValue, code: menuCurrency))
             }
         } else {
-            text += L10n.string("，%@", item.priceNote ?? L10n.string("時價"))
+            text += L10n.string("，%@", display.priceNote ?? L10n.string("時價"))
         }
         if let summary = item.summary, !summary.isEmpty {
             text += L10n.string("，%@", summary)
@@ -203,6 +232,9 @@ struct MenuItemCard: View {
             let labels = item.possibleAllergens.map(Allergen.displayLabel)
                 .joined(separator: L10n.string("、"))
             text += L10n.string("，可能含有 %@，請與餐廳確認", labels)
+        }
+        if display.isInCompletedOrder == false {
+            text += "，" + L10n.string("未有加入已完成訂單")
         }
         return text
     }

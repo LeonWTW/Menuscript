@@ -1,103 +1,130 @@
 import Foundation
 import SwiftUI
 
+enum BillFXPresentation {
+    static func quoteDate(
+        quoteDate: String?,
+        legacyDate: Date?
+    ) -> String? {
+        if let quoteDate,
+           FXQuoteDate.isCanonical(quoteDate) {
+            return quoteDate
+        }
+        guard let legacyDate else {
+            return nil
+        }
+        return FXQuoteDate.string(from: legacyDate)
+    }
+}
+
+@MainActor
+enum BillFXRefresh {
+    static func fetch(
+        for session: MenuSession,
+        provider: any FXRateProviding
+    ) async -> FXRate? {
+        guard !session.isCompleted,
+              session.menuCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                != session.homeCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+              let fresh = await provider.rate(
+                from: session.menuCurrency,
+                to: session.homeCurrency
+              ) else {
+            return nil
+        }
+        return fresh
+    }
+}
+
 /// The Bill screen (WF-5): order lines, a surcharge/tax control, subtotal
 /// through total, and an AA (even-split) section. Presentation only — all
 /// arithmetic goes through `BillMath`; this view formats and lays it out.
 /// Consumes only `Theme.swift` tokens.
 struct BillView: View {
     @Bindable var session: MenuSession
+    var onCompleted: () -> Void = {}
 
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var isRefreshingRate = false
+    @State private var isFinalizing = false
+    @State private var finalizeErrorMessage: String?
+    @State private var fxRefreshErrorMessage: String?
+
+    private let fxProvider: any FXRateProviding
 
     private let surchargePresets: [Double] = [0, 8, 10]
     private let surchargeBounds: ClosedRange<Double> = 0...30
     private let peopleBounds: ClosedRange<Int> = 1...20
 
-    private static let fxDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+    init(
+        session: MenuSession,
+        fxProvider: any FXRateProviding,
+        fxProviderMode: RuntimeMode? = nil,
+        onCompleted: @escaping () -> Void = {}
+    ) {
+        self.session = session
+        self.fxProvider = fxProvider
+        self.onCompleted = onCompleted
+    }
 
     var body: some View {
+        Group {
+            switch BillPresentationState.resolve(for: session) {
+            case .content(let display):
+                billContent(display)
+            case .unavailable(let reason):
+                ContentUnavailableView(
+                    "帳單未能安全顯示",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(reason.localizedMessage)
+                )
+            }
+        }
+        .background { Color.mtBackground.ignoresSafeArea() }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("完成") {
+                    completeOrDismiss()
+                }
+                .disabled(isFinalizing)
+            }
+        }
+        .alert("帳單", isPresented: finalizeErrorBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(finalizeErrorMessage ?? "")
+        }
+        .alert("更新匯率失敗", isPresented: fxRefreshErrorBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(fxRefreshErrorMessage ?? "")
+        }
+    }
+
+    private func billContent(_ display: BillDisplayModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                orderLinesSection
-                surchargeSection
-                totalsSection
-                aaSection
+                orderLinesSection(display)
+                surchargeSection(display)
+                totalsSection(display)
+                aaSection(display)
             }
             .padding(MTSpacing.screenMargin)
         }
-        .background { Color.mtBackground.ignoresSafeArea() }
-    }
-
-    // MARK: - Derived data
-
-    private var orderLines: [MenuItem] {
-        session.items
-            .filter { $0.quantity > 0 }
-            .sorted { $0.sortOrder < $1.sortOrder }
-    }
-
-    private var hasUnpricedLines: Bool {
-        orderLines.contains { $0.priceValue == nil }
-    }
-
-    private var subtotal: Decimal {
-        let lines: [(price: Decimal, qty: Int)] = orderLines.compactMap { item in
-            guard let price = item.priceValue else { return nil }
-            return (price: price, qty: item.quantity)
-        }
-        return BillMath.subtotal(lines: lines)
-    }
-
-    private var total: Decimal {
-        BillMath.total(subtotal: subtotal, surchargePercent: session.surchargePercent)
-    }
-
-    private var surchargeAmount: Decimal {
-        total - subtotal
-    }
-
-    private var menuFractionDigits: Int {
-        BillMath.fractionDigits(forCurrency: session.menuCurrency)
-    }
-
-    private var homeFractionDigits: Int {
-        BillMath.fractionDigits(forCurrency: session.homeCurrency)
-    }
-
-    /// Total converted to home currency, when an FX rate is available.
-    private var convertedTotal: Decimal? {
-        guard let fxRate = session.effectiveFXRate else { return nil }
-        return BillMath.converted(total, rate: fxRate)
-    }
-
-    private var perPersonOriginal: Decimal {
-        BillMath.perPerson(total: total, people: session.peopleCount, fractionDigits: menuFractionDigits)
-    }
-
-    /// Per-person share of the converted total (convert first, then split),
-    /// rounded up at the home currency's fraction digits.
-    private var perPersonConverted: Decimal? {
-        guard let convertedTotal else { return nil }
-        return BillMath.perPerson(total: convertedTotal, people: session.peopleCount, fractionDigits: homeFractionDigits)
     }
 
     // MARK: - Order lines
 
-    private var orderLinesSection: some View {
+    private func orderLinesSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: MTSpacing.cardGap) {
-            ForEach(orderLines, id: \.persistentModelID) { item in
-                orderLineRow(item)
+            ForEach(display.lines) { line in
+                orderLineRow(line, display: display)
             }
-            if hasUnpricedLines {
+            if display.hasUnpricedLines {
                 Text("＊ 未有標價嘅品項未計入總數")
                     .font(.footnote)
                     .foregroundStyle(Color.mtTextSecondary)
@@ -107,44 +134,68 @@ struct BillView: View {
         .background(sectionBackground)
     }
 
-    private func orderLineRow(_ item: MenuItem) -> some View {
+    private func orderLineRow(
+        _ line: BillDisplayLine,
+        display: BillDisplayModel
+    ) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(item.translatedName) ×\(item.quantity)")
+            Text("\(line.translatedName) ×\(line.quantity)")
                 .font(.mtDishName)
                 .foregroundStyle(Color.mtTextPrimary)
                 .lineLimit(2)
             Spacer(minLength: 8)
-            if let priceValue = item.priceValue {
-                Text(CurrencyFormat.format(priceValue * Decimal(item.quantity), code: session.menuCurrency))
+            if let unitPrice = line.unitPrice {
+                Text(CurrencyFormat.format(
+                    unitPrice * Decimal(line.quantity),
+                    code: display.menuCurrency
+                ))
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtTextPrimary)
             } else {
-                Text(item.priceNote ?? L10n.string("時價"))
+                Text(line.priceNote ?? L10n.string("時價"))
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtTextSecondary)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(orderLineAccessibilityLabel(item))
+        .accessibilityLabel(orderLineAccessibilityLabel(line, display: display))
     }
 
-    private func orderLineAccessibilityLabel(_ item: MenuItem) -> String {
-        if let priceValue = item.priceValue {
-            let lineTotal = CurrencyFormat.format(priceValue * Decimal(item.quantity), code: session.menuCurrency)
-            return L10n.string("%@，%lld 件，小計 %@", item.translatedName, item.quantity, lineTotal)
+    private func orderLineAccessibilityLabel(
+        _ line: BillDisplayLine,
+        display: BillDisplayModel
+    ) -> String {
+        if let unitPrice = line.unitPrice {
+            let lineTotal = CurrencyFormat.format(
+                unitPrice * Decimal(line.quantity),
+                code: display.menuCurrency
+            )
+            return L10n.string("%@，%lld 件，小計 %@", line.translatedName, line.quantity, lineTotal)
         }
-        return L10n.string("%@，%lld 件，%@，未計入總數", item.translatedName, item.quantity, item.priceNote ?? L10n.string("時價"))
+        return L10n.string(
+            "%@，%lld 件，%@，未計入總數",
+            line.translatedName,
+            line.quantity,
+            line.priceNote ?? L10n.string("時價")
+        )
     }
 
     // MARK: - Surcharge
 
-    private var surchargeSection: some View {
+    private func surchargeSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("附加費／稅")
                 .font(.mtChip)
                 .foregroundStyle(Color.mtTextSecondary)
-            surchargeControls
-            if session.menuCurrency.uppercased() == "JPY" {
+            if display.isReadOnly {
+                Text(verbatim: "\(display.surchargePercent.formatted())%")
+                    .font(.mtDishName)
+                    .foregroundStyle(Color.mtTextPrimary)
+                    .accessibilityLabel("附加費／稅 \(display.surchargePercent.formatted())%")
+            } else {
+                surchargeControls
+            }
+            if display.menuCurrency.uppercased() == "JPY" {
                 Text("日本消費稅通常 10%（堂食）／8%（外賣）")
                     .font(.footnote)
                     .foregroundStyle(Color.mtTextSecondary)
@@ -223,14 +274,20 @@ struct BillView: View {
 
     // MARK: - Totals
 
-    private var totalsSection: some View {
+    private func totalsSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            summaryRow(label: "小計", value: CurrencyFormat.format(subtotal, code: session.menuCurrency))
-            summaryRow(label: "附加費", value: CurrencyFormat.format(surchargeAmount, code: session.menuCurrency))
+            summaryRow(
+                label: "小計",
+                value: CurrencyFormat.format(display.subtotal, code: display.menuCurrency)
+            )
+            summaryRow(
+                label: "附加費",
+                value: CurrencyFormat.format(display.surchargeAmount, code: display.menuCurrency)
+            )
             Divider()
-            totalHero
-            if session.menuCurrency.uppercased() != session.homeCurrency.uppercased() {
-                fxStatusLine
+            totalHero(display)
+            if display.menuCurrency.uppercased() != display.homeCurrency.uppercased() {
+                fxStatusLine(display)
             }
         }
         .padding(MTSpacing.cardPadding)
@@ -243,25 +300,43 @@ struct BillView: View {
     /// its date) so a changed override/live rate is never silently at odds
     /// with what the user sees on screen, and explains the gap when no rate
     /// could be resolved at all instead of just omitting the conversion.
-    private var fxStatusLine: some View {
+    private func fxStatusLine(_ display: BillDisplayModel) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            Text(fxStatusText)
+            Text(fxStatusText(display))
                 .font(.footnote)
                 .foregroundStyle(Color.mtTextSecondary)
             Spacer(minLength: 8)
-            refreshRateButton
+            if !display.isReadOnly {
+                refreshRateButton
+            }
         }
     }
 
-    private var fxStatusText: String {
-        guard let fxRate = session.effectiveFXRate else {
-            return L10n.string("攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入", session.menuCurrency, session.homeCurrency)
+    private func fxStatusText(_ display: BillDisplayModel) -> String {
+        guard let fxRate = display.fxRate else {
+            return L10n.string(
+                "攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入",
+                display.menuCurrency,
+                display.homeCurrency
+            )
         }
         let rateText = String(format: "%.4f", fxRate)
-        let dateText = session.fxRateDate.map { Self.fxDateFormatter.string(from: $0) }
-        let rateDescription = L10n.string("匯率 1 %@ ≈ %@ %@", session.menuCurrency, rateText, session.homeCurrency)
-        if session.fxSource == "manual" {
+        let dateText = BillFXPresentation.quoteDate(
+            quoteDate: display.fxQuoteDate,
+            legacyDate: display.fxRateDate
+        )
+        let rateDescription = L10n.string(
+            "匯率 1 %@ ≈ %@ %@",
+            display.menuCurrency,
+            rateText,
+            display.homeCurrency
+        )
+        if display.fxSource == "manual" {
             return dateText.map { L10n.string("%@（手動設定於 %@）", rateDescription, $0) } ?? L10n.string("%@（手動設定）", rateDescription)
+        }
+        if display.fxSource == "mock" {
+            return dateText.map { L10n.string("%@（示範匯率，%@）", rateDescription, $0) }
+                ?? L10n.string("%@（示範匯率）", rateDescription)
         }
         return dateText.map { L10n.string("%@（%@）", rateDescription, $0) } ?? rateDescription
     }
@@ -287,13 +362,34 @@ struct BillView: View {
     }
 
     private func refreshFXRate() async {
-        guard session.menuCurrency.uppercased() != session.homeCurrency.uppercased() else { return }
+        guard !session.isCompleted,
+              session.menuCurrency.uppercased() != session.homeCurrency.uppercased() else { return }
+        fxRefreshErrorMessage = nil
         isRefreshingRate = true
         defer { isRefreshingRate = false }
-        guard let fresh = await FXService().rate(from: session.menuCurrency, to: session.homeCurrency) else { return }
-        session.fxRate = fresh.rate
-        session.fxRateDate = fresh.date
-        session.fxSource = fresh.source.persistedValue
+        guard let fresh = await BillFXRefresh.fetch(
+            for: session,
+            provider: fxProvider
+        ) else {
+            fxRefreshErrorMessage = L10n.string(
+                "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+            )
+            return
+        }
+        do {
+            try SessionStore(context: modelContext).updateFXRate(fresh, for: session)
+        } catch {
+            fxRefreshErrorMessage = L10n.string(
+                "最新匯率未能儲存，請稍後再試。"
+            )
+        }
+    }
+
+    private var fxRefreshErrorBinding: Binding<Bool> {
+        Binding(
+            get: { fxRefreshErrorMessage != nil },
+            set: { if !$0 { fxRefreshErrorMessage = nil } }
+        )
     }
 
     private func summaryRow(label: LocalizedStringKey, value: String) -> some View {
@@ -309,60 +405,63 @@ struct BillView: View {
     }
 
     @ViewBuilder
-    private var totalHero: some View {
+    private func totalHero(_ display: BillDisplayModel) -> some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
                     heroLabel("總數")
-                    totalAmountStack(alignment: .leading)
+                    totalAmountStack(display, alignment: .leading)
                 }
             } else {
                 HStack(alignment: .firstTextBaseline) {
                     heroLabel("總數")
                     Spacer(minLength: 8)
-                    totalAmountStack(alignment: .trailing)
+                    totalAmountStack(display, alignment: .trailing)
                 }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("總數 \(totalAccessibilityValue)")
+        .accessibilityLabel("總數 \(totalAccessibilityValue(display))")
     }
 
-    private func totalAmountStack(alignment: HorizontalAlignment) -> some View {
+    private func totalAmountStack(
+        _ display: BillDisplayModel,
+        alignment: HorizontalAlignment
+    ) -> some View {
         VStack(alignment: alignment, spacing: 2) {
-            if let convertedTotal {
-                Text("≈ " + CurrencyFormat.format(convertedTotal, code: session.homeCurrency))
+            if let convertedTotal = display.convertedTotal {
+                Text("≈ " + CurrencyFormat.format(convertedTotal, code: display.homeCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
-                Text(CurrencyFormat.format(total, code: session.menuCurrency))
+                Text(CurrencyFormat.format(display.total, code: display.menuCurrency))
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtPriceOriginal)
             } else {
-                Text(CurrencyFormat.format(total, code: session.menuCurrency))
+                Text(CurrencyFormat.format(display.total, code: display.menuCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
             }
         }
     }
 
-    private var totalAccessibilityValue: String {
-        if let convertedTotal {
-            let converted = CurrencyFormat.format(convertedTotal, code: session.homeCurrency)
-            let original = CurrencyFormat.format(total, code: session.menuCurrency)
+    private func totalAccessibilityValue(_ display: BillDisplayModel) -> String {
+        if let convertedTotal = display.convertedTotal {
+            let converted = CurrencyFormat.format(convertedTotal, code: display.homeCurrency)
+            let original = CurrencyFormat.format(display.total, code: display.menuCurrency)
             return L10n.string("約 %@，原幣 %@", converted, original)
         }
-        return CurrencyFormat.format(total, code: session.menuCurrency)
+        return CurrencyFormat.format(display.total, code: display.menuCurrency)
     }
 
     // MARK: - AA (even split)
 
-    private var aaSection: some View {
+    private func aaSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("AA 埋單")
                 .font(.mtChip)
                 .foregroundStyle(Color.mtTextSecondary)
-            peopleRow
-            perPersonHero
+            peopleRow(display)
+            perPersonHero(display)
             Text("每人銀碼向上取整，總收可能多出少許")
                 .font(.footnote)
                 .foregroundStyle(Color.mtTextSecondary)
@@ -371,66 +470,101 @@ struct BillView: View {
         .background(sectionBackground)
     }
 
-    private var peopleRow: some View {
+    private func peopleRow(_ display: BillDisplayModel) -> some View {
         HStack {
             Text("人數")
                 .font(.footnote)
                 .foregroundStyle(Color.mtTextSecondary)
             Spacer()
-            PeopleCountStepper(value: $session.peopleCount, bounds: peopleBounds)
+            if display.isReadOnly {
+                Text("\(display.peopleCount) 人")
+                    .font(Font.mtDishName.monospacedDigit())
+                    .foregroundStyle(Color.mtTextPrimary)
+            } else {
+                PeopleCountStepper(value: $session.peopleCount, bounds: peopleBounds)
+            }
         }
     }
 
     @ViewBuilder
-    private var perPersonHero: some View {
+    private func perPersonHero(_ display: BillDisplayModel) -> some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
                     heroLabel("每人應付")
-                    perPersonAmountStack(alignment: .leading)
+                    perPersonAmountStack(display, alignment: .leading)
                 }
             } else {
                 HStack(alignment: .firstTextBaseline) {
                     heroLabel("每人應付")
                     Spacer(minLength: 8)
-                    perPersonAmountStack(alignment: .trailing)
+                    perPersonAmountStack(display, alignment: .trailing)
                 }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("每人應付 \(perPersonAccessibilityValue)")
+        .accessibilityLabel("每人應付 \(perPersonAccessibilityValue(display))")
     }
 
-    private func perPersonAmountStack(alignment: HorizontalAlignment) -> some View {
+    private func perPersonAmountStack(
+        _ display: BillDisplayModel,
+        alignment: HorizontalAlignment
+    ) -> some View {
         VStack(alignment: alignment, spacing: 2) {
-            if let perPersonConverted {
-                Text("≈ " + CurrencyFormat.format(perPersonConverted, code: session.homeCurrency))
+            if let perPersonConverted = display.perPersonConverted {
+                Text("≈ " + CurrencyFormat.format(perPersonConverted, code: display.homeCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
-                Text(CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency))
+                Text(CurrencyFormat.format(display.perPersonOriginal, code: display.menuCurrency))
                     .font(.mtPriceSecondary)
                     .foregroundStyle(Color.mtPriceOriginal)
             } else {
-                Text(CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency))
+                Text(CurrencyFormat.format(display.perPersonOriginal, code: display.menuCurrency))
                     .font(.mtCartTotal)
                     .foregroundStyle(Color.mtPriceConverted)
             }
         }
     }
 
-    private var perPersonAccessibilityValue: String {
-        if let perPersonConverted {
-            let converted = CurrencyFormat.format(perPersonConverted, code: session.homeCurrency)
-            let original = CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency)
+    private func perPersonAccessibilityValue(_ display: BillDisplayModel) -> String {
+        if let perPersonConverted = display.perPersonConverted {
+            let converted = CurrencyFormat.format(perPersonConverted, code: display.homeCurrency)
+            let original = CurrencyFormat.format(display.perPersonOriginal, code: display.menuCurrency)
             return L10n.string("約 %@，原幣 %@", converted, original)
         }
-        return CurrencyFormat.format(perPersonOriginal, code: session.menuCurrency)
+        return CurrencyFormat.format(display.perPersonOriginal, code: display.menuCurrency)
     }
 
     private func heroLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.mtDishName)
             .foregroundStyle(Color.mtTextPrimary)
+    }
+
+    // MARK: - Completion
+
+    private var finalizeErrorBinding: Binding<Bool> {
+        Binding(
+            get: { finalizeErrorMessage != nil },
+            set: { if !$0 { finalizeErrorMessage = nil } }
+        )
+    }
+
+    private func completeOrDismiss() {
+        if session.isCompleted {
+            dismiss()
+            return
+        }
+
+        isFinalizing = true
+        defer { isFinalizing = false }
+        do {
+            _ = try SessionStore(context: modelContext).finalize(session)
+            dismiss()
+            onCompleted()
+        } catch {
+            finalizeErrorMessage = error.localizedDescription
+        }
     }
 
     // MARK: - Chrome
@@ -546,7 +680,11 @@ private struct PeopleCountStepper: View {
         MenuItem(originalName: "生ビール", translatedName: "生啤", priceValue: 550, category: "飲品", quantity: 3, sortOrder: 2),
     ]
     return NavigationStack {
-        BillView(session: session)
+        BillView(
+            session: session,
+            fxProvider: MockFXService(),
+            fxProviderMode: .mock
+        )
             .navigationTitle("帳單")
             .navigationBarTitleDisplayMode(.inline)
     }
