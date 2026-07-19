@@ -1,42 +1,33 @@
 import Foundation
 
-struct FXRate: Equatable, Sendable {
-    var rate: Double
-    var date: Date
-    var source: Source
+/// Fetches currency conversion rates with a manual-override → live → fresh
+/// cache fallback chain. Frankfurter v2 is used for every supported pair,
+/// including TWD. Cached quotes have a hard seven-day lifetime.
+///
+/// The class is immutable apart from thread-safe URLSession/UserDefaults
+/// dependencies. UserDefaults is not annotated Sendable, hence unchecked.
+final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideStoring {
+    static let cacheLifetime: TimeInterval = 7 * 24 * 60 * 60
 
-    enum Source: Equatable, Sendable {
-        case live
-        case cached
-        case manual
-
-        /// The string form persisted on `MenuSession.fxSource`.
-        var persistedValue: String {
-            switch self {
-            case .live: return "live"
-            case .cached: return "cached"
-            case .manual: return "manual"
-            }
-        }
-    }
-}
-
-/// Fetches currency conversion rates with a manual-override → live → cached
-/// fallback chain. Holds only immutable dependencies so it is safe to share
-/// across concurrency domains. `@unchecked` only because `UserDefaults` isn't
-/// annotated `Sendable` yet, despite being thread-safe.
-final class FXService: @unchecked Sendable {
     private let session: URLSession
     private let defaults: UserDefaults
+    private let clock: @Sendable () -> Date
+    private let maxCacheAge: TimeInterval
 
-    init(session: URLSession = FXService.makeDefaultSession(), defaults: UserDefaults = .standard) {
+    init(
+        session: URLSession = FXService.makeDefaultSession(),
+        defaults: UserDefaults = .standard,
+        clock: @escaping @Sendable () -> Date = { Date() },
+        maxCacheAge: TimeInterval = FXService.cacheLifetime
+    ) {
         self.session = session
         self.defaults = defaults
+        self.clock = clock
+        self.maxCacheAge = max(0, maxCacheAge)
     }
 
-    /// `.shared`'s default configuration has no per-request timeout; FX
-    /// lookups sit on the critical path right after a successful (paid)
-    /// Gemini extraction, so a blackholed host must not hang indefinitely.
+    /// FX sits immediately after a potentially paid Gemini request, so a
+    /// blackholed rates host must not hold that flow indefinitely.
     static func makeDefaultSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -44,114 +35,229 @@ final class FXService: @unchecked Sendable {
         return URLSession(configuration: configuration)
     }
 
-    func rate(from: String, to: String) async -> FXRate? {
-        let from = from.uppercased()
-        let to = to.uppercased()
+    func rate(from rawFrom: String, to rawTo: String) async -> FXRate? {
+        guard let from = Self.normalizedCurrencyCode(rawFrom),
+              let to = Self.normalizedCurrencyCode(rawTo) else {
+            return nil
+        }
 
+        let now = clock()
         if from == to {
-            return FXRate(rate: 1.0, date: Date(), source: .live)
+            return FXRate(
+                rate: 1,
+                quoteDate: FXQuoteDate.string(from: now),
+                fetchedAt: now,
+                source: .live
+            )
         }
 
         let overrideValue = defaults.double(forKey: Self.overrideKey(from: from, to: to))
-        if overrideValue > 0 {
-            let overrideDate = defaults.object(forKey: Self.overrideDateKey(from: from, to: to)) as? Date ?? Date()
-            return FXRate(rate: overrideValue, date: overrideDate, source: .manual)
+        if overrideValue.isFinite, overrideValue > 0 {
+            let legacyDate = defaults.object(
+                forKey: Self.overrideDateKey(from: from, to: to)
+            ) as? Date
+            let storedQuoteDate = defaults.string(
+                forKey: Self.overrideQuoteDateKey(from: from, to: to)
+            )
+            let quoteDate = Self.manualQuoteDate(
+                storedQuoteDate: storedQuoteDate,
+                legacyDate: legacyDate,
+                fallback: now
+            )
+            return FXRate(
+                rate: overrideValue,
+                quoteDate: quoteDate,
+                fetchedAt: legacyDate ?? now,
+                source: .manual
+            )
         }
 
         let cacheKey = Self.cacheKey(from: from, to: to)
-
-        if let live = try? await fetchLive(from: from, to: to) {
-            let payload = CachedPayload(rate: live.rate, date: live.date, fetchedAt: Date())
+        do {
+            let live = try await fetchLive(from: from, to: to)
+            let payload = CachedPayloadV2(
+                version: 2,
+                rate: live.rate,
+                quoteDate: live.quoteDate,
+                fetchedAt: now
+            )
             if let data = try? JSONEncoder().encode(payload) {
                 defaults.set(data, forKey: cacheKey)
             }
-            return FXRate(rate: live.rate, date: live.date, source: .live)
+            return FXRate(
+                rate: live.rate,
+                quoteDate: live.quoteDate,
+                fetchedAt: now,
+                source: .live
+            )
+        } catch {
+            guard !Task.isCancelled else { return nil }
         }
 
-        if let data = defaults.data(forKey: cacheKey),
-           let cached = try? JSONDecoder().decode(CachedPayload.self, from: data) {
-            return FXRate(rate: cached.rate, date: cached.date, source: .cached)
+        // A live attempt can take long enough to cross the hard TTL. Read the
+        // injected clock again instead of validating against its pre-flight
+        // value, otherwise a cache entry can be returned after it expires.
+        return cachedRate(forKey: cacheKey, now: clock())
+    }
+
+    func setManualOverride(_ rate: Double?, from rawFrom: String, to rawTo: String) {
+        FXManualOverrideStore(defaults: defaults, clock: clock)
+            .setManualOverride(rate, from: rawFrom, to: rawTo)
+    }
+
+    private func fetchLive(
+        from: String,
+        to: String
+    ) async throws -> (rate: Double, quoteDate: String) {
+        guard let url = URL(
+            string: "https://api.frankfurter.dev/v2/rate/\(from)/\(to)"
+        ) else {
+            throw URLError(.badURL)
+        }
+
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let decoded = try JSONDecoder().decode(FrankfurterV2Response.self, from: data)
+        guard Self.normalizedCurrencyCode(decoded.base) == from,
+              Self.normalizedCurrencyCode(decoded.quote) == to,
+              decoded.rate.isFinite,
+              decoded.rate > 0,
+              FXQuoteDate.isCanonical(decoded.date) else {
+            throw URLError(.cannotParseResponse)
+        }
+        return (decoded.rate, decoded.date)
+    }
+
+    private func cachedRate(forKey key: String, now: Date) -> FXRate? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+
+        if let payload = try? JSONDecoder().decode(CachedPayloadV2.self, from: data),
+           payload.version == 2,
+           isUsableCachedRate(
+               rate: payload.rate,
+               quoteDate: payload.quoteDate,
+               fetchedAt: payload.fetchedAt,
+               now: now
+           ) {
+            return FXRate(
+                rate: payload.rate,
+                quoteDate: payload.quoteDate,
+                fetchedAt: payload.fetchedAt,
+                source: .cached
+            )
+        }
+
+        // Legacy payload written by the v1 client. Date is converted to a
+        // canonical UTC date-only value, while fetchedAt still enforces TTL.
+        if let legacy = try? JSONDecoder().decode(LegacyCachedPayload.self, from: data) {
+            let quoteDate = FXQuoteDate.string(from: legacy.date)
+            guard isUsableCachedRate(
+                rate: legacy.rate,
+                quoteDate: quoteDate,
+                fetchedAt: legacy.fetchedAt,
+                now: now
+            ) else {
+                return nil
+            }
+            return FXRate(
+                rate: legacy.rate,
+                quoteDate: quoteDate,
+                fetchedAt: legacy.fetchedAt,
+                source: .cached
+            )
         }
 
         return nil
     }
 
-    func setManualOverride(_ rate: Double?, from: String, to: String) {
-        let from = from.uppercased()
-        let to = to.uppercased()
-        let key = Self.overrideKey(from: from, to: to)
-        let dateKey = Self.overrideDateKey(from: from, to: to)
-        if let rate {
-            defaults.set(rate, forKey: key)
-            defaults.set(Date(), forKey: dateKey)
-        } else {
-            defaults.removeObject(forKey: key)
-            defaults.removeObject(forKey: dateKey)
+    private func isUsableCachedRate(
+        rate: Double,
+        quoteDate: String,
+        fetchedAt: Date,
+        now: Date
+    ) -> Bool {
+        guard rate.isFinite, rate > 0, FXQuoteDate.isCanonical(quoteDate) else {
+            return false
+        }
+        let age = now.timeIntervalSince(fetchedAt)
+        return age >= 0 && age <= maxCacheAge
+    }
+
+    static func normalizedCurrencyCode(_ code: String) -> String? {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard normalized.range(
+            of: "^[A-Z]{3}$",
+            options: .regularExpression
+        ) != nil else {
+            return nil
+        }
+        return normalized
+    }
+
+    /// During the compatibility window a new build writes both keys, while an
+    /// old build only updates the legacy Date. If that old-build write is on a
+    /// later UTC date, the date-only key is stale and must not win when the
+    /// user returns to a new build.
+    private static func manualQuoteDate(
+        storedQuoteDate: String?,
+        legacyDate: Date?,
+        fallback: Date
+    ) -> String {
+        let canonicalStored = storedQuoteDate.flatMap {
+            FXQuoteDate.isCanonical($0) ? $0 : nil
+        }
+        let legacyQuoteDate = legacyDate.map(FXQuoteDate.string(from:))
+
+        switch (canonicalStored, legacyQuoteDate) {
+        case let (stored?, legacy?):
+            // Canonical ISO dates sort chronologically.
+            return legacy > stored ? legacy : stored
+        case let (stored?, nil):
+            return stored
+        case let (nil, legacy?):
+            return legacy
+        case (nil, nil):
+            return FXQuoteDate.string(from: fallback)
         }
     }
 
-    private func fetchLive(from: String, to: String) async throws -> (rate: Double, date: Date) {
-        // Defense-in-depth: `from`/`to` can originate from free-text Settings
-        // fields or a Gemini-detected currency, so reject anything that isn't
-        // a plain 3-letter code before it reaches the query string.
-        guard Self.isValidCurrencyCode(from), Self.isValidCurrencyCode(to) else {
-            throw URLError(.badURL)
-        }
-        var components = URLComponents(string: "https://api.frankfurter.dev/v1/latest")
-        components?.queryItems = [
-            URLQueryItem(name: "from", value: from),
-            URLQueryItem(name: "to", value: to),
-        ]
-        guard let url = components?.url else {
-            throw URLError(.badURL)
-        }
-
-        let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-
-        let decoded = try JSONDecoder().decode(FrankfurterResponse.self, from: data)
-        guard let rateValue = decoded.rates[to] else {
-            throw URLError(.cannotParseResponse)
-        }
-
-        return (rateValue, Self.parseDate(decoded.date) ?? Date())
-    }
-
-    /// `from`/`to` are expected to already be uppercased by the caller.
-    private static func isValidCurrencyCode(_ code: String) -> Bool {
-        code.range(of: "^[A-Z]{3}$", options: .regularExpression) != nil
-    }
-
-    private static func overrideKey(from: String, to: String) -> String {
+    static func overrideKey(from: String, to: String) -> String {
         "fx.override.\(from).\(to)"
     }
 
-    private static func overrideDateKey(from: String, to: String) -> String {
+    static func overrideDateKey(from: String, to: String) -> String {
         "fx.override.date.\(from).\(to)"
+    }
+
+    static func overrideQuoteDateKey(from: String, to: String) -> String {
+        "fx.override.quoteDate.\(from).\(to)"
     }
 
     private static func cacheKey(from: String, to: String) -> String {
         "fx.cache.\(from).\(to)"
     }
-
-    private static func parseDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: string)
-    }
 }
 
-private struct FrankfurterResponse: Decodable {
+private struct FrankfurterV2Response: Decodable {
     let date: String
-    let rates: [String: Double]
+    let base: String
+    let quote: String
+    let rate: Double
 }
 
-private struct CachedPayload: Codable {
-    var rate: Double
-    var date: Date
-    var fetchedAt: Date
+private struct CachedPayloadV2: Codable {
+    let version: Int
+    let rate: Double
+    let quoteDate: String
+    let fetchedAt: Date
+}
+
+private struct LegacyCachedPayload: Codable {
+    let rate: Double
+    let date: Date
+    let fetchedAt: Date
 }

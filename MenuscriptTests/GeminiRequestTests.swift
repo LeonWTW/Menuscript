@@ -65,6 +65,46 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertNil(URLComponents(string: url)?.queryItems)
     }
 
+    func testAPIKeyIsTrimmedBeforeEnteringHeader() throws {
+        let request = try makeProvider(key: " \n test-key-123 \t").buildExtractRequest(
+            images: [imageA],
+            targetLanguage: "English"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "x-goog-api-key"),
+            "test-key-123"
+        )
+        XCTAssertFalse(try XCTUnwrap(request.url?.absoluteString).contains("test-key-123"))
+    }
+
+    func testFinalSerializedBodyCannotExceed18MB() {
+        XCTAssertEqual(GeminiProvider.maximumRequestBodyBytes, 18_000_000)
+        // Base64 expands 13.5 MB to exactly 18 MB before JSON/prompt overhead,
+        // so the final serialized request must be rejected.
+        let largeImage = Data(repeating: 0xAB, count: 13_500_000)
+        XCTAssertThrowsError(try makeProvider().buildExtractRequest(
+            images: [largeImage],
+            targetLanguage: "English"
+        )) { error in
+            XCTAssertEqual(error as? VisionProviderError, .payloadTooLarge)
+        }
+    }
+
+    func testSerializedBodyBoundaryAllowsExactly18MBAndRejectsOneByteMore() throws {
+        let exactLimit = Data(count: GeminiProvider.maximumRequestBodyBytes)
+        XCTAssertEqual(
+            try GeminiProvider.validateSerializedRequestBody(exactLimit).count,
+            18_000_000
+        )
+
+        let oneByteOver = Data(count: GeminiProvider.maximumRequestBodyBytes + 1)
+        XCTAssertThrowsError(
+            try GeminiProvider.validateSerializedRequestBody(oneByteOver)
+        ) { error in
+            XCTAssertEqual(error as? VisionProviderError, .payloadTooLarge)
+        }
+    }
+
     func testBodyHasOneInlineDataPartPerImagePlusOneTextPart() throws {
         let request = try makeProvider().buildExtractRequest(images: [imageA, imageB], targetLanguage: "繁體中文")
         let parts = try parts(of: request)

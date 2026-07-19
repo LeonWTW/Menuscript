@@ -6,6 +6,8 @@ import Foundation
 /// `buildExtractRequest` / `parseExtractResponse` and `buildExplainRequest` / `parseExplainResponse`.
 /// The API key travels ONLY in the `x-goog-api-key` header — never in the URL, never logged.
 struct GeminiProvider: MenuVisionProvider {
+    static let maximumRequestBodyBytes = 18_000_000
+    private static let maximumErrorEnvelopeBytes = 64_000
 
     private let apiKey: @Sendable () -> String?
     private let model: String
@@ -112,9 +114,11 @@ struct GeminiProvider: MenuVisionProvider {
     }
 
     private func requireAPIKey() throws -> String {
-        guard let key = apiKey(), !key.isEmpty else {
+        guard let rawKey = apiKey() else {
             throw VisionProviderError.missingAPIKey
         }
+        let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw VisionProviderError.missingAPIKey }
         return key
     }
 
@@ -128,8 +132,19 @@ struct GeminiProvider: MenuVisionProvider {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // Key goes in this header only. Never append it to the URL query.
         request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try Self.validateSerializedRequestBody(bodyData)
         return request
+    }
+
+    /// Applies the transport limit to the final serialized bytes, after JSON
+    /// and base64 overhead have been added. Kept internal as a cheap boundary
+    /// seam so tests do not need to construct multi-megabyte image fixtures.
+    static func validateSerializedRequestBody(_ bodyData: Data) throws -> Data {
+        guard bodyData.count <= Self.maximumRequestBodyBytes else {
+            throw VisionProviderError.payloadTooLarge
+        }
+        return bodyData
     }
 
     // MARK: - Prompt
@@ -422,7 +437,9 @@ struct GeminiProvider: MenuVisionProvider {
     /// Compact, English description of a decode error — it is echoed back to the model
     /// in the corrective retry prompt (the user-facing wrapper text lives in VisionProviderError).
     private static func describe(_ error: Error) -> String {
-        guard let decodingError = error as? DecodingError else { return String(describing: error) }
+        guard let decodingError = error as? DecodingError else {
+            return "unexpected decoding error"
+        }
         func path(_ codingPath: [CodingKey]) -> String {
             codingPath.isEmpty ? "root" : codingPath.map(\.stringValue).joined(separator: ".")
         }
@@ -436,21 +453,38 @@ struct GeminiProvider: MenuVisionProvider {
         case .dataCorrupted(let context):
             return "invalid JSON: \(context.debugDescription)"
         @unknown default:
-            return String(describing: decodingError)
+            return "unexpected decoding error"
         }
     }
 
     // MARK: - Transport
+
+    private struct GoogleErrorEnvelope: Decodable {
+        struct Payload: Decodable {
+            struct Detail: Decodable {
+                let reason: String?
+            }
+
+            let code: Int?
+            let message: String?
+            let status: String?
+            let details: [Detail]?
+        }
+
+        let error: Payload?
+    }
 
     private func send(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
-        } catch let error as URLError {
-            throw VisionProviderError.network(error.localizedDescription)
         } catch {
-            throw VisionProviderError.network(String(describing: error))
+            // Transport errors can carry arbitrary provider/userInfo text. In
+            // particular a custom URLProtocol error may echo request headers,
+            // so never retain localizedDescription or String(describing:).
+            let code = (error as? URLError)?.code
+            throw VisionProviderError.network(Self.safeNetworkMessage(for: code))
         }
         guard let http = response as? HTTPURLResponse else {
             throw VisionProviderError.network(L10n.string("非 HTTP 回應"))
@@ -458,10 +492,141 @@ struct GeminiProvider: MenuVisionProvider {
         switch http.statusCode {
         case 200..<300:
             return data
-        case 429:
-            throw VisionProviderError.rateLimited
         default:
-            throw VisionProviderError.http(http.statusCode)
+            throw Self.transportError(
+                statusCode: http.statusCode,
+                retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"),
+                data: data
+            )
         }
+    }
+
+    /// Maps only the finite URL error code to fixed text. No source error or
+    /// userInfo crosses this boundary, preventing secrets from being retained
+    /// in an Equatable error that can later reach UI, diagnostics, or logs.
+    static func safeNetworkMessage(for code: URLError.Code?) -> String {
+        switch code {
+        case .notConnectedToInternet:
+            return "offline"
+        case .timedOut:
+            return "request timed out"
+        case .networkConnectionLost:
+            return "connection lost"
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+            return "service unreachable"
+        case .cancelled:
+            return "request cancelled"
+        default:
+            return "network request failed"
+        }
+    }
+
+    /// Maps only bounded, known fields from Google's error envelope. The
+    /// service message is used for classification but is never retained in the
+    /// thrown error, which prevents an echoed key/request fragment leaking into
+    /// logs or UI.
+    static func transportError(
+        statusCode: Int,
+        retryAfterHeader: String?,
+        data: Data,
+        now: Date = Date()
+    ) -> VisionProviderError {
+        let bounded = Data(data.prefix(Self.maximumErrorEnvelopeBytes))
+        let payload = (try? JSONDecoder().decode(
+            GoogleErrorEnvelope.self,
+            from: bounded
+        ))?.error
+
+        let status = payload?.status?.uppercased() ?? ""
+        let message = payload?.message?.lowercased() ?? ""
+        let reasons = payload?.details?
+            .compactMap(\.reason)
+            .map { $0.uppercased() } ?? []
+        let reasonText = reasons.joined(separator: " ")
+        let retryAfter = parsedRetryAfter(retryAfterHeader, now: now)
+
+        if statusCode == 413 {
+            return .payloadTooLarge
+        }
+        if (500...599).contains(statusCode) {
+            return .serviceUnavailable
+        }
+
+        let invalidKeyReason = reasonText.contains("API_KEY_INVALID")
+            || reasonText.contains("API_KEY_EXPIRED")
+        let invalidKeyMessage = message.contains("api key not valid")
+            || message.contains("invalid api key")
+            || message.contains("api key is invalid")
+        if statusCode == 401
+            || status == "UNAUTHENTICATED"
+            || invalidKeyReason
+            || invalidKeyMessage {
+            return .invalidAPIKey
+        }
+
+        if reasonText.contains("BILLING")
+            || status == "FAILED_PRECONDITION" && message.contains("billing")
+            || message.contains("billing account")
+            || message.contains("billing is not enabled") {
+            return .billingRequired
+        }
+
+        let isQuota = status == "RESOURCE_EXHAUSTED"
+            || reasonText.contains("QUOTA")
+            || message.contains("quota exceeded")
+            || message.contains("quota has been exhausted")
+        if isQuota {
+            return .quotaExceeded(retryAfter: retryAfter)
+        }
+
+        let isModelFailure = statusCode == 404
+            || status == "NOT_FOUND"
+            || message.contains("model") && (
+                message.contains("not found")
+                    || message.contains("not supported")
+                    || message.contains("not available")
+            )
+        if isModelFailure {
+            return .modelUnavailable
+        }
+
+        if statusCode == 403 || status == "PERMISSION_DENIED" {
+            return .permissionDenied
+        }
+
+        if statusCode == 400 || status == "INVALID_ARGUMENT" {
+            return .invalidRequest
+        }
+
+        if statusCode == 429 {
+            if let retryAfter {
+                return .rateLimitedWithRetryAfter(retryAfter)
+            }
+            return .rateLimited
+        }
+
+        return .http(statusCode)
+    }
+
+    private static func parsedRetryAfter(
+        _ header: String?,
+        now: Date
+    ) -> TimeInterval? {
+        guard let value = header?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        if let seconds = TimeInterval(value), seconds.isFinite, seconds >= 0 {
+            return seconds
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        guard let date = formatter.date(from: value) else { return nil }
+        return max(0, date.timeIntervalSince(now))
     }
 }

@@ -1,34 +1,197 @@
 import Foundation
 
-/// Stub `MenuVisionProvider` that ignores its inputs and returns a fixed,
-/// realistic 居酒屋 (izakaya) menu after a short simulated delay. Useful for
-/// UI development and previews without calling a real vision API.
+/// Fully offline, deterministic menu provider used by demo mode.
+///
+/// The fixture has a language-neutral core and explicit English/Traditional
+/// Chinese projections. Unsupported targets fail loudly instead of returning
+/// Cantonese content that only looks translated.
 struct MockVisionProvider: MenuVisionProvider {
-    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
-        try await Task.sleep(for: .milliseconds(500))
-        return Self.sampleMenu
+    func extractMenu(
+        images: [Data],
+        targetLanguage: String,
+        allergens: [String]
+    ) async throws -> ExtractedMenu {
+        let target = try MockTargetLanguage(targetLanguage)
+        let requestedAllergens = Self.normalizedRequestedAllergens(allergens)
+
+        return ExtractedMenu(
+            detectedLanguage: target.detectedLanguage,
+            menuCurrency: "JPY",
+            restaurantName: "鷹の目",
+            items: Self.fixtures.map { fixture in
+                let copy = fixture.copy(for: target)
+                let canonicalHits = Set(fixture.canonicalAllergens.map { $0.lowercased() })
+                let hits = requestedAllergens.filter {
+                    canonicalHits.contains($0.lowercased())
+                }
+                return ExtractedMenu.Item(
+                    original: fixture.original,
+                    translated: copy.translated,
+                    price: fixture.price,
+                    priceNote: copy.priceNote,
+                    category: copy.category,
+                    lowConfidence: fixture.lowConfidence,
+                    summary: copy.summary,
+                    possibleAllergens: hits
+                )
+            }
+        )
     }
 
-    func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
-        try await Task.sleep(for: .milliseconds(300))
-        return "「\(original)」係呢間居酒屋嘅人氣菜式之一，選料新鮮，做法保留咗傳統日式風味。呢道菜好啱配一杯清酒或者生啤酒一齊享用，係好多熟客必點嘅選擇。"
+    func explainDish(
+        original: String,
+        language: String,
+        targetLanguage: String
+    ) async throws -> String {
+        switch try MockTargetLanguage(targetLanguage) {
+        case .traditionalChinese:
+            return "「\(original)」係呢間居酒屋嘅人氣菜式之一，選料新鮮，做法保留咗傳統日式風味。呢道菜好啱配一杯清酒或者生啤酒一齊享用，係好多熟客必點嘅選擇。"
+        case .english:
+            return "\"\(original)\" is a popular izakaya dish prepared with fresh ingredients in a traditional Japanese style. It is commonly enjoyed with sake or draft beer."
+        }
     }
 
-    private static let sampleMenu = ExtractedMenu(
-        detectedLanguage: "日文",
-        menuCurrency: "JPY",
-        restaurantName: "鷹の目",
-        items: [
-            ExtractedMenu.Item(original: "焼きなす", translated: "烤茄子", price: 500, priceNote: nil, category: "燒烤", lowConfidence: false, summary: "炭烤茄子淋薑蓉醬油，清爽開胃", possibleAllergens: []),
-            ExtractedMenu.Item(original: "唐揚げ", translated: "日式炸雞", price: 650, priceNote: nil, category: "燒烤", lowConfidence: true, summary: "外脆內嫩嘅日式炸雞塊", possibleAllergens: ["wheat", "soy", "egg"]),
-            ExtractedMenu.Item(original: "手羽先の塩焼き", translated: "鹽烤雞翅", price: 480, priceNote: nil, category: "燒烤", lowConfidence: false, summary: "鹽燒雞翼，皮脆肉嫩", possibleAllergens: []),
-            ExtractedMenu.Item(original: "焼き鳥盛り合わせ", translated: "串燒拼盤", price: 900, priceNote: nil, category: "燒烤", lowConfidence: false, summary: "多款炭燒雞肉串拼盤", possibleAllergens: ["soy"]),
-            ExtractedMenu.Item(original: "炒飯", translated: "日式炒飯", price: 750, priceNote: nil, category: "主食", lowConfidence: false, summary: "鑊氣十足嘅日式炒飯", possibleAllergens: []),
-            ExtractedMenu.Item(original: "焼きおにぎり", translated: "烤飯糰", price: 350, priceNote: nil, category: "主食", lowConfidence: false, summary: "香烤醬油飯糰，外脆內軟", possibleAllergens: []),
-            ExtractedMenu.Item(original: "生ビール(小)", translated: "生啤酒（小杯）", price: 480, priceNote: nil, category: "飲品", lowConfidence: false, summary: "冰凍生啤，小杯裝", possibleAllergens: ["gluten", "wheat"]),
-            ExtractedMenu.Item(original: "日本酒", translated: "日本清酒", price: nil, priceNote: "時價", category: "飲品", lowConfidence: false, summary: "傳統日本米酒，時價供應", possibleAllergens: []),
-            ExtractedMenu.Item(original: "ウーロン茶", translated: "烏龍茶", price: 300, priceNote: nil, category: "飲品", lowConfidence: false, summary: "解膩烏龍茶，冷熱皆宜", possibleAllergens: []),
-            ExtractedMenu.Item(original: "豚汁", translated: "豬肉味噌湯", price: 420, priceNote: nil, category: "湯品", lowConfidence: false, summary: "豬肉蔬菜味噌湯，暖胃管飽", possibleAllergens: ["soy"])
-        ]
-    )
+    /// Keeps only non-empty request values and deduplicates case-insensitively
+    /// while preserving the exact spelling/case of the first requested value.
+    private static func normalizedRequestedAllergens(_ allergens: [String]) -> [String] {
+        var seen = Set<String>()
+        return allergens.compactMap { raw in
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty,
+                  seen.insert(value.lowercased()).inserted else {
+                return nil
+            }
+            return value
+        }
+    }
+
+    private static let fixtures: [Fixture] = [
+        Fixture(
+            original: "焼きなす",
+            price: 500,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "烤茄子", priceNote: nil, category: "燒烤", summary: "炭烤茄子淋薑蓉醬油，清爽開胃"),
+            en: .init(translated: "Grilled eggplant", priceNote: nil, category: "Grilled", summary: "Charred eggplant with ginger soy sauce.")
+        ),
+        Fixture(
+            original: "唐揚げ",
+            price: 650,
+            lowConfidence: true,
+            canonicalAllergens: ["wheat", "soy", "egg"],
+            zh: .init(translated: "日式炸雞", priceNote: nil, category: "燒烤", summary: "外脆內嫩嘅日式炸雞塊"),
+            en: .init(translated: "Japanese fried chicken", priceNote: nil, category: "Grilled", summary: "Crisp, juicy Japanese fried chicken.")
+        ),
+        Fixture(
+            original: "手羽先の塩焼き",
+            price: 480,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "鹽烤雞翅", priceNote: nil, category: "燒烤", summary: "鹽燒雞翼，皮脆肉嫩"),
+            en: .init(translated: "Salt-grilled chicken wings", priceNote: nil, category: "Grilled", summary: "Crisp chicken wings seasoned with salt.")
+        ),
+        Fixture(
+            original: "焼き鳥盛り合わせ",
+            price: 900,
+            lowConfidence: false,
+            canonicalAllergens: ["soy"],
+            zh: .init(translated: "串燒拼盤", priceNote: nil, category: "燒烤", summary: "多款炭燒雞肉串拼盤"),
+            en: .init(translated: "Assorted yakitori", priceNote: nil, category: "Grilled", summary: "A selection of charcoal-grilled chicken skewers.")
+        ),
+        Fixture(
+            original: "炒飯",
+            price: 750,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "日式炒飯", priceNote: nil, category: "主食", summary: "鑊氣十足嘅日式炒飯"),
+            en: .init(translated: "Japanese fried rice", priceNote: nil, category: "Mains", summary: "Wok-fried rice in a Japanese style.")
+        ),
+        Fixture(
+            original: "焼きおにぎり",
+            price: 350,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "烤飯糰", priceNote: nil, category: "主食", summary: "香烤醬油飯糰，外脆內軟"),
+            en: .init(translated: "Grilled rice ball", priceNote: nil, category: "Mains", summary: "A crisp soy-glazed rice ball.")
+        ),
+        Fixture(
+            original: "生ビール(小)",
+            price: 480,
+            lowConfidence: false,
+            canonicalAllergens: ["gluten", "wheat"],
+            zh: .init(translated: "生啤酒（小杯）", priceNote: nil, category: "飲品", summary: "冰凍生啤，小杯裝"),
+            en: .init(translated: "Draft beer (small)", priceNote: nil, category: "Drinks", summary: "A small glass of chilled draft beer.")
+        ),
+        Fixture(
+            original: "日本酒",
+            price: nil,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "日本清酒", priceNote: "時價", category: "飲品", summary: "傳統日本米酒，時價供應"),
+            en: .init(translated: "Japanese sake", priceNote: "Market price", category: "Drinks", summary: "Traditional Japanese rice wine.")
+        ),
+        Fixture(
+            original: "ウーロン茶",
+            price: 300,
+            lowConfidence: false,
+            canonicalAllergens: [],
+            zh: .init(translated: "烏龍茶", priceNote: nil, category: "飲品", summary: "解膩烏龍茶，冷熱皆宜"),
+            en: .init(translated: "Oolong tea", priceNote: nil, category: "Drinks", summary: "Refreshing oolong tea served hot or cold.")
+        ),
+        Fixture(
+            original: "豚汁",
+            price: 420,
+            lowConfidence: false,
+            canonicalAllergens: ["soy"],
+            zh: .init(translated: "豬肉味噌湯", priceNote: nil, category: "湯品", summary: "豬肉蔬菜味噌湯，暖胃管飽"),
+            en: .init(translated: "Pork miso soup", priceNote: nil, category: "Soup", summary: "A hearty miso soup with pork and vegetables.")
+        ),
+    ]
+}
+
+private enum MockTargetLanguage {
+    case traditionalChinese
+    case english
+
+    init(_ rawValue: String) throws {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed.lowercased() {
+        case "english", "en":
+            self = .english
+        case "繁體中文", "traditional chinese", "zh-hant", "zh_hant":
+            self = .traditionalChinese
+        default:
+            throw VisionProviderError.unsupportedTargetLanguage(trimmed)
+        }
+    }
+
+    var detectedLanguage: String {
+        switch self {
+        case .traditionalChinese: return "日文"
+        case .english: return "Japanese"
+        }
+    }
+}
+
+private struct Fixture {
+    struct Copy {
+        let translated: String
+        let priceNote: String?
+        let category: String
+        let summary: String
+    }
+
+    let original: String
+    let price: Decimal?
+    let lowConfidence: Bool
+    let canonicalAllergens: [String]
+    let zh: Copy
+    let en: Copy
+
+    func copy(for target: MockTargetLanguage) -> Copy {
+        switch target {
+        case .traditionalChinese: return zh
+        case .english: return en
+        }
+    }
 }
