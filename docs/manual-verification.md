@@ -104,3 +104,30 @@ Before the hands-on pass, an automated simulator smoke run (driven via `simctl` 
 ### Status
 
 Automated coverage for both features is in place and green (see Scope & Environment), and the same-day automated smoke run above additionally confirmed migration crash-freedom and the summary/icon render paths. The interactive cases (settings persistence, alert content, photo search) and the live-key case remain for the hands-on manual pass; the "Observed result" column is to be completed by that pass.
+
+## 2026-07-15 — Privacy, Offline Mock, and Completed-History Contract
+
+This section defines the next hands-on pass for the hardened lifecycle, provider, FX, and privacy behavior. It deliberately does not claim final test totals or manual results; the root integration run and signed/archive inspection remain the source of final evidence.
+
+### Current Contract
+
+- Recognition creates an unfinished draft. Tapping Done on a non-empty bill atomically saves a versioned immutable snapshot and returns to History; completed quantities, surcharge, people count, FX values, and totals are read-only.
+- History separates unfinished and completed sessions. A session with saved photos exposes a photo-stack toolbar button; pages stay in capture order and support count, VoiceOver, pinch/double-tap zoom, and corrupt-data fallback.
+- Mock mode resolves mock vision and mock FX together. The core Capture → Menu → Bill → History flow must work with networking blocked and without reading a Gemini key. Dish photo search remains an explicit Google Images browser action.
+- Live mode discloses the direct Google Gemini transfer before its first request. Camera and photo-library permission prompts also distinguish live Google transfer from on-device mock processing.
+- Live FX uses Frankfurter v2 blended reference rates, supports TWD, and accepts a cached quote only through its seven-day lifetime.
+- The app privacy manifest declares no tracking/domains; it conservatively declares linked Photos/Videos, Other User Content, and Health for App Functionality and UserDefaults reason `CA92.1`.
+
+### Manual Test Cases
+
+| # | Test case and expected result | Observed result |
+|---|-------------------------------|-----------------|
+| 1 | On a fresh install with live mode selected, start recognition. The Google disclosure names the menu images/context being sent and offers Continue/Cancel. Cancel sends no request; reopening shows the disclosure again. | pending — 待人手實測 |
+| 2 | Continue once, complete recognition, then begin a second live recognition. The disclosure is not repeated after consent has been recorded. | pending — 待人手實測 |
+| 3 | Trigger camera and photo-library permission prompts in both locales. English and Traditional Chinese prompts each mention Google Gemini in live mode and on-device processing in Demo Mode. | pending — 待人手實測 |
+| 4 | Enable Demo Mode, remove any stored key, and block network access. Complete Capture → Menu → Bill → History with mock conversion; confirm no Gemini or Frankfurter request. Then tap dish photo search and confirm that this explicit action attempts to load Google Images. | pending — 待人手實測 |
+| 5 | Exit after recognition but before completing a bill. History shows the session under Unfinished. Reopen, complete it, and confirm it moves to Completed and returns to History. | pending — 待人手實測 |
+| 6 | Reopen a completed bill and attempt to change line quantity, surcharge, people, or refresh FX. No mutation control is available and displayed values match the completion snapshot. | pending — 待人手實測 |
+| 7 | Open History photo galleries with one and six pages; verify order, counter, VoiceOver labels, pinch/double-tap zoom, and bounded memory while paging. A session with zero photos has no gallery button. | pending — 待人手實測 |
+| 8 | Exercise a TWD pair live, then disable network before and after the seven-day cache boundary. The fresh cached quote is accepted; the expired quote is not. Quote date stays unchanged across LA/Honolulu timezone changes. | pending — 待人手實測 |
+| 9 | Inspect the archived app root for `PrivacyInfo.xcprivacy` and validate its collected-data and required-reason entries against the privacy labels prepared for distribution. | pending — 待人手實測 |
