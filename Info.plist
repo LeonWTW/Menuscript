@@ -19,9 +19,9 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSCameraUsageDescription</key>
-	<string>影菜單用嚟辨識翻譯</string>
+	<string>用相機拍攝菜單相作辨識翻譯。真實模式會將所拍菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>揀菜單相用嚟辨識翻譯</string>
+	<string>選取菜單相作辨識翻譯。真實模式會將所選菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
