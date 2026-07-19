@@ -13,8 +13,7 @@ struct CaptureView: View {
     @State private var pickerSelection: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showSettings = false
-    @State private var isLoadingPhotos = false
-    @State private var failedPhotoLoadCount = 0
+    @State private var photoImporter = PhotoImportCoordinator()
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -47,7 +46,9 @@ struct CaptureView: View {
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker(
                 onImagePicked: { image in
-                    vm.addPhotos([image])
+                    if vm.canAddMorePhotos {
+                        vm.addPhotos([image])
+                    }
                     showCamera = false
                 },
                 onCancel: {
@@ -58,28 +59,51 @@ struct CaptureView: View {
         }
         .onChange(of: pickerSelection) { _, newItems in
             guard !newItems.isEmpty else { return }
-            Task { await loadPickedPhotos(newItems) }
+            importPickedPhotos(newItems)
         }
         .onChange(of: vm.completedSession) { _, newSession in
             if let newSession {
                 onComplete(newSession)
             }
         }
-        .alert("未設定 API key", isPresented: $vm.needsAPIKey) {
-            Button("去 Settings") { showSettings = true }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("請先喺設定入面填返 Gemini API Key，或者開啟示範模式。")
-        }
         .alert("辨識失敗", isPresented: errorAlertBinding) {
-            Button("好", role: .cancel) {}
+            if let recoveryAction = vm.recoveryAction {
+                recoveryButton(for: recoveryAction)
+            }
+            Button("取消", role: .cancel) {
+                vm.clearProviderError()
+            }
         } message: {
             Text(vm.errorMessage ?? "")
+        }
+        .alert("傳送資料到 Google Gemini", isPresented: $vm.needsLiveDisclosure) {
+            Button("同意並繼續") {
+                vm.acceptLiveDisclosure()
+                vm.startRecognize()
+            }
+            Button("取消", role: .cancel) {
+                vm.cancelLiveDisclosure()
+            }
+        } message: {
+            Text("使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。")
+        }
+        .alert("辨識失敗", isPresented: captureIssueAlertBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(vm.captureIssue?.message ?? "")
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 SettingsView()
             }
+        }
+        .onDisappear {
+            CaptureImportLifecycle.handleDisappear(
+                isPresentingCamera: showCamera,
+                isPresentingSettings: showSettings,
+                coordinator: photoImporter,
+                viewModel: vm
+            )
         }
     }
 
@@ -87,7 +111,32 @@ struct CaptureView: View {
         Binding(
             get: { vm.errorMessage != nil },
             set: { isPresented in
-                if !isPresented { vm.errorMessage = nil }
+                if !isPresented { vm.clearProviderError() }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func recoveryButton(for action: ProviderRecoveryAction) -> some View {
+        switch action {
+        case .openSettings:
+            Button("去 Settings") { showSettings = true }
+        case .reviewPermissions:
+            Button("檢查專案權限") { showSettings = true }
+        case .reviewBilling:
+            Button("檢查計費設定") { showSettings = true }
+        case .reviewModel:
+            Button("檢查 Model 設定") { showSettings = true }
+        case .retry:
+            Button("再試一次") { vm.startRecognize() }
+        }
+    }
+
+    private var captureIssueAlertBinding: Binding<Bool> {
+        Binding(
+            get: { vm.captureIssue != nil },
+            set: { isPresented in
+                if !isPresented { vm.captureIssue = nil }
             }
         )
     }
@@ -106,24 +155,37 @@ struct CaptureView: View {
             .padding(.vertical, 40)
         } else {
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(Array(vm.photos.enumerated()), id: \.offset) { index, photo in
-                    photoThumbnail(photo, index: index)
+                ForEach(vm.photos) { photo in
+                    photoThumbnail(photo)
                 }
             }
         }
     }
 
-    private func photoThumbnail(_ image: UIImage, index: Int) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFill()
+    private func photoThumbnail(_ photo: CapturedPhoto) -> some View {
+        ZStack {
+            if let preview = photo.preview {
+                Image(uiImage: preview)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.secondary.opacity(0.12)
+                if photo.isPending {
+                    ProgressView()
+                } else {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
             .frame(height: 110)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .clipped()
             .overlay(alignment: .topTrailing) {
                 Button {
-                    vm.removePhoto(at: index)
+                    vm.removePhoto(id: photo.id)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .symbolRenderingMode(.palette)
@@ -133,21 +195,36 @@ struct CaptureView: View {
                 .padding(4)
                 .accessibilityLabel("刪除呢張相")
             }
+            .overlay(alignment: .bottomLeading) {
+                if photo.failure != nil {
+                    Label("載入失敗", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(.red.opacity(0.9), in: Capsule())
+                        .padding(5)
+                }
+            }
     }
 
     @ViewBuilder
     private var photoLoadStatus: some View {
-        if isLoadingPhotos {
+        if vm.pendingPhotoCount > 0 {
             HStack(spacing: 8) {
                 ProgressView()
-                Text("載入緊相片…")
+                Text("載入緊相片…（\(vm.photos.count)/\(CaptureLimits.maxPhotoCount)）")
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
-        } else if failedPhotoLoadCount > 0 {
-            Text("\(failedPhotoLoadCount) 張相載入失敗")
+        } else if vm.failedPhotoCount > 0 {
+            Text("\(vm.failedPhotoCount) 張相載入失敗；請刪除失敗嘅相，再重新揀選或拍攝。")
                 .font(.footnote)
                 .foregroundStyle(.red)
+        } else if !vm.photos.isEmpty {
+            Text("\(vm.photos.count)/\(CaptureLimits.maxPhotoCount) 張相")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -156,31 +233,42 @@ struct CaptureView: View {
     private var addButtons: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                PhotosPicker(selection: $pickerSelection, maxSelectionCount: 6, matching: .images) {
+                PhotosPicker(
+                    selection: $pickerSelection,
+                    maxSelectionCount: max(1, vm.remainingPhotoCapacity),
+                    matching: .images
+                ) {
                     Label("相簿", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .disabled(!vm.canAddMorePhotos)
 
                 if isCameraAvailable {
                     Button {
-                        showCamera = true
+                        if vm.canAddMorePhotos {
+                            showCamera = true
+                        }
                     } label: {
                         Label("相機", systemImage: "camera")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(!vm.canAddMorePhotos)
                 }
             }
 
             #if DEBUG
             Button {
-                vm.addPhotos([Self.demoPhoto()])
+                if vm.canAddMorePhotos {
+                    vm.addPhotos([Self.demoPhoto()])
+                }
             } label: {
                 Label("示範相", systemImage: "wand.and.stars")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .disabled(!vm.canAddMorePhotos)
             #endif
         }
     }
@@ -194,7 +282,7 @@ struct CaptureView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
-        .disabled(!vm.canRecognize || isLoadingPhotos)
+        .disabled(!vm.canRecognize)
     }
 
     private var recognizingOverlay: some View {
@@ -215,28 +303,34 @@ struct CaptureView: View {
 
     // MARK: - Photo loading
 
-    @MainActor
-    private func loadPickedPhotos(_ items: [PhotosPickerItem]) async {
-        // Reset before awaiting any load: a mid-load re-pick must not
-        // re-append the items this call is already loading.
+    private func importPickedPhotos(_ items: [PhotosPickerItem]) {
+        // Clear synchronously and reserve slots before any await. The UI
+        // pauses new selections while these slots are pending; if stale or
+        // programmatic events do overlap, the coordinator still reserves and
+        // resolves them safely.
         pickerSelection = []
-        isLoadingPhotos = true
-        defer { isLoadingPhotos = false }
+        guard vm.canAddMorePhotos else { return }
 
-        var images: [UIImage] = []
-        var failedCount = 0
-        for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = ImagePrep.downsampledImage(from: data, maxPixelSize: ImagePrep.captureMaxPixelSize) {
-                images.append(image)
-            } else {
-                failedCount += 1
+        let loaders: [PhotoImportCoordinator.Loader] = items.map { item in
+            {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        return .failure(.loadFailed)
+                    }
+                    return await Task.detached(priority: .userInitiated) {
+                        guard let prepared = ImagePrep.preparedPhoto(from: data) else {
+                            return Result<ImagePrep.PreparedPhoto, CapturedPhotoFailure>.failure(.invalidImage)
+                        }
+                        return .success(prepared)
+                    }.value
+                } catch is CancellationError {
+                    return .failure(.loadFailed)
+                } catch {
+                    return .failure(.loadFailed)
+                }
             }
         }
-        if !images.isEmpty {
-            vm.addPhotos(images)
-        }
-        failedPhotoLoadCount = failedCount
+        photoImporter.importBatch(loaders: loaders, into: vm)
     }
 
     #if DEBUG

@@ -48,6 +48,32 @@ struct ImagePrepTests {
         #expect(decoded.size.height == 600)
     }
 
+    @Test("Prepared photo keeps one exact JPEG for preview, upload, and persistence")
+    func preparedPhotoUsesExactJPEG() throws {
+        let image = Self.solidImage(size: CGSize(width: 2200, height: 1600))
+
+        let prepared = try #require(ImagePrep.preparedPhoto(from: image))
+
+        #expect(!prepared.jpegData.isEmpty)
+        let decoded = try #require(UIImage(data: prepared.jpegData))
+        #expect(prepared.preview.size == decoded.size)
+        #expect(max(decoded.size.width, decoded.size.height) <= 1600)
+    }
+
+    @Test("JPEG encoder failure returns nil instead of a partial prepared photo")
+    func preparedPhotoFailsAtomicallyWhenEncoderFails() {
+        let image = Self.solidImage(size: CGSize(width: 100, height: 100))
+
+        let prepared = ImagePrep.preparedPhoto(from: image) { _ in nil }
+
+        #expect(prepared == nil)
+    }
+
+    @Test("Invalid source data cannot create a prepared photo")
+    func invalidSourceDataFailsPreparation() {
+        #expect(ImagePrep.preparedPhoto(from: Data([0x00, 0x01, 0x02])) == nil)
+    }
+
     private static func solidImage(size: CGSize, color: UIColor = .systemRed) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1.0
