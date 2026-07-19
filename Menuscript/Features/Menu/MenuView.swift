@@ -12,6 +12,7 @@ struct MenuView: View {
 
     @State private var selectedCategory: String?
     @State private var explainItem: MenuItem?
+    @State private var photoSearchItem: MenuItem?
     @State private var showBill = false
 
     private var categories: [String] {
@@ -35,7 +36,7 @@ struct MenuView: View {
     }
 
     private var convertedSubtotalText: String? {
-        guard let fxRate = session.fxRate else { return nil }
+        guard let fxRate = session.effectiveFXRate else { return nil }
         let converted = BillMath.converted(cartTotals.subtotal, rate: fxRate)
         return "≈ " + CurrencyFormat.format(converted, code: session.homeCurrency)
     }
@@ -49,15 +50,21 @@ struct MenuView: View {
             if filteredItems.isEmpty {
                 emptyCategoryState
             } else {
-                LazyVStack(spacing: MTSpacing.cardGap) {
-                    ForEach(filteredItems, id: \.persistentModelID) { item in
-                        MenuItemCard(
-                            item: item,
-                            menuCurrency: session.menuCurrency,
-                            homeCurrency: session.homeCurrency,
-                            fxRate: session.fxRate,
-                            onExplain: { explainItem = $0 }
-                        )
+                VStack(spacing: MTSpacing.cardGap) {
+                    LazyVStack(spacing: MTSpacing.cardGap) {
+                        ForEach(filteredItems, id: \.persistentModelID) { item in
+                            MenuItemCard(
+                                item: item,
+                                menuCurrency: session.menuCurrency,
+                                homeCurrency: session.homeCurrency,
+                                fxRate: session.effectiveFXRate,
+                                onExplain: { explainItem = $0 },
+                                onPhotoSearch: { photoSearchItem = $0 }
+                            )
+                        }
+                    }
+                    if !session.allergenProfile.isEmpty {
+                        allergenFootnote
                     }
                 }
                 .padding(.horizontal, MTSpacing.screenMargin)
@@ -94,6 +101,9 @@ struct MenuView: View {
         .animation(.default, value: isCartVisible)
         .sheet(item: $explainItem) { item in
             explainSheet(for: item)
+        }
+        .sheet(item: $photoSearchItem) { item in
+            photoSearchSheet(for: item)
         }
         .sheet(isPresented: $showBill) {
             NavigationStack {
@@ -132,6 +142,27 @@ struct MenuView: View {
 
     private func explainSheet(for item: MenuItem) -> some View {
         ExplainSheet(item: item)
+    }
+
+    @ViewBuilder
+    private func photoSearchSheet(for item: MenuItem) -> some View {
+        let trimmed = item.originalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = trimmed.isEmpty ? item.translatedName : trimmed
+        if let url = PhotoSearch.imagesURL(query: query) {
+            SafariView(url: url)
+                .ignoresSafeArea()
+        } else {
+            Text("無法建立搜尋連結")
+        }
+    }
+
+    private var allergenFootnote: some View {
+        Text("敏感原警示根據辨識當時嘅設定，僅供參考，落單前請同餐廳確認。")
+            .font(.footnote)
+            .foregroundStyle(Color.mtTextSecondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 12)
     }
 
     #if DEBUG

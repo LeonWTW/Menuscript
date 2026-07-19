@@ -6,7 +6,7 @@ This document is a plain account of how I used AI (Claude Code) to build Menuscr
 
 My working style for this project is AI-assisted engineering: Claude Code writes the majority of the actual Swift code, and I act as the engineer directing it — I set the milestone scope, write or approve the requirements, decide the acceptance criteria for each step, and review/approve every milestone before moving to the next one. Concretely, the app was built in a sequence of milestones (M1 scaffold, M2 models/services, M3 capture flow, M4 menu UI, M5 bill/explain/history, M6 review fixes + polish), plus a follow-up bilingual UI milestone, each landed as its own commit (`167a013` through `249dd5f`), and Sprint 1's project-definition docs were written the same way (`1ee3893`, `fee488d`).
 
-For each milestone I gave Claude Code a scoped brief (what to build, what the acceptance test was, which files were in/out of scope), let it produce the implementation and tests, and then reviewed the diff and ran the app/tests myself before accepting the milestone. AI did not choose the feature slice, the architecture direction, or when something was "done" — those were my calls. What AI did well: turning a written spec into working SwiftUI/SwiftData code quickly, keeping test coverage alongside new features (currently 46 tests across 12 suites), and handling repetitive/mechanical work like the bilingual string catalog entries.
+For each milestone I gave Claude Code a scoped brief (what to build, what the acceptance test was, which files were in/out of scope), let it produce the implementation and tests, and then reviewed the diff and ran the app/tests myself before accepting the milestone. AI did not choose the feature slice, the architecture direction, or when something was "done" — those were my calls. What AI did well: turning a written spec into working SwiftUI/SwiftData code quickly, keeping test coverage alongside new features (46 tests across 12 suites as of that milestone; the suite has since grown with later features), and handling repetitive/mechanical work like the bilingual string catalog entries.
 
 ## AI Engineering Review
 
@@ -49,3 +49,46 @@ All 46 tests across 12 suites pass, including the new `SettingsKeysTests` suite 
 ## Engineering Responsibility Statement
 
 To be precise about the division of labor: AI (Claude Code) wrote the large majority of the code in this repository, generated the fixes for issues (1) and (2), and ran the AI engineering review that identified all four issues in the first place. That is a real and substantial contribution, and I'm not going to describe it as "just helping out." But every engineering judgment call in this project was mine: defining the feature slice and milestone scope, writing the acceptance criteria for each milestone, deciding which of the four review findings to fix now versus postpone (and why), reviewing the actual diffs before accepting them rather than accepting them blind, running the test suite and manually exercising the fixed flows myself rather than taking a "tests passed" report at face value, and making the final call on what ships in this Sprint 2 submission. AI did not decide what "done" means for this project, did not choose to defer issues (3) and (4), and did not verify its own work — I did.
+
+## 2026-07-12 — Allergen Warnings + Photo Search (feature addition)
+
+After the core prototype and the AI-review fixes above, I added two scoped Sprint 2 UX features — per-dish allergen advisories with an always-on one-line summary, and one-tap dish photo search — again as AI-assisted engineering against a written plan I approved first (`docs/feature-plan-allergen-photo-search-2026-07-12.md`).
+
+### AI Implementation Assistance
+
+I directed this the same way as the earlier milestones: I wrote and approved the feature plan — the scope, the implementation chunks, the acceptance criteria, and the explicit safety framing that allergen output is advisory only and must never claim a dish is "safe" — and Claude Code produced the implementation and tests. Per the approved plan, the work was carried out by five parallel implementation agents working the plan's independent chunks (Allergen model + Settings; the extraction contract across the provider protocol / Gemini / Mock; persist + wire into `CaptureViewModel`; photo-search plumbing; and the card + menu UI), followed by this documentation pass. I reviewed the resulting diff before accepting it. The full automated suite is green: `xcodebuild test` exit 0, Swift Testing 82/18 suites + XCTest 33, 0 failures — including the new `AllergenTests`, `PhotoSearchTests`, and `GeminiRequestTests` and the extended `CaptureViewModelTests` / `ExtractedMenuDecodeTests`.
+
+### Engineering Review Highlights
+
+Reviewing the implementation for the kinds of gaps a feature-complete pass can miss, four points stood out and were handled deliberately:
+
+1. **The corrective retry carries the allergen list.** `GeminiProvider.extractMenu` does one corrective retry on a parse failure by rebuilding the request; the rebuild passes `allergens` through explicitly, so a retry can't silently downgrade to the no-allergen prompt/schema. This is the highest-risk correctness point in the change, and it's pinned by `GeminiRequestTests`.
+2. **Prompt/schema are conditional on allergen presence.** The `possibleAllergens` prompt rule and JSON-schema field are added only when the user actually has allergens configured — `summary` is always required, but `possibleAllergens` enters the schema's `properties`/`required` only when the list is non-empty — so a user with no allergens pays no extra prompt or latency cost.
+3. **The summary is kept separate from the explanation cache.** The always-on one-line `summary` is its own field, distinct from `MenuItem.explanation` (the on-demand ExplainSheet cache), so the two never collide and the existing explain flow is untouched.
+4. **All new SwiftData fields are defaulted.** `MenuItem.summary`, `MenuItem.possibleAllergens`, and `MenuSession.allergenProfile` are optional/defaulted, so existing sessions migrate under SwiftData lightweight migration without a schema-version bump.
+
+### Accepted Suggestions
+
+- **Assert against `displayName`, not a hard-coded literal.** The allergen tests assert on `Allergen.displayLabel(...)` / `displayName` output rather than a fixed string literal, so a localized-name edit or a UI-language switch doesn't spuriously break them — locale-safe by construction.
+- **Hermetic JPY test, no network.** The extraction/decode coverage exercises the `summary` + `possibleAllergens` contract against JPY menu fixtures (decoding a wire payload) instead of a live call, keeping the tests deterministic and offline with no dependency on Gemini or a network round-trip.
+
+### Rejected or Postponed Suggestions
+
+- **Dedicated red "danger" color token — deferred.** The allergen warning icon reuses the existing amber `mtWarning` token (told apart from the low-confidence triangle by icon shape). Adding a distinct red danger token to the theme is a design-system change out of scope for this feature; deferred and recorded in the README's Intentionally Deferred list.
+- **AI summary in the VoiceOver label — initially deferred, then folded in during the quality gate.** The first pass presented the one-line summary visually only. The follow-up quality-gate review (below) judged the information-parity gap a one-line fix, so the summary is now appended to the card's spoken `accessibilitySummary` alongside the allergen advisory.
+
+### Post-Implementation Quality Gate (2026-07-12, same day)
+
+After the implementation landed and the suite was green, a second adversarial AI review (instructed to hunt for what the green tests missed) plus an independent fresh-context acceptance verifier ran over the full diff. The verifier independently reproduced the automated evidence (xcodegen + `xcodebuild test`, exit 0, 115 tests) and confirmed no doc claims anything unverified. The adversarial review returned seven findings, each with a concrete failure scenario; five were fixed immediately:
+
+- **Prompt self-contradiction (the important one):** pre-existing rule 10 told the model to *ignore allergy footnotes* while new rule 12 asked for allergen detection — menu-printed allergen declarations are the most reliable signal there is. Rule 12 now explicitly makes menu-printed allergen information authoritative for `possibleAllergens`, and a request-builder test pins the clause.
+- **Allergen icon tap target** was ~17pt (its two neighbor buttons honor 44pt); the hit area is now ~45pt via a negative `contentShape` inset, no layout shift.
+- **AI-returned allergens are now case-insensitively deduped** at parse time (a repeated entry would have rendered twice in the alert); decode test added.
+- **The 200-char custom-allergen cap** aborted at the first over-long entry, silently starving every allergen listed after it; it now skips the oversized entry and keeps later ones (tests updated to pin the skip behavior).
+- **The 「、」 list separator was hard-coded** into English UI output; it is now a localized catalog string (", " in English).
+
+Two accepted design flags were also acted on: the photo button dropped from the accent color to the secondary icon color to match the explain button beside it (the accent stays reserved for cart calls-to-action), and the VoiceOver summary parity fix noted above. One finding was deferred: a direct test of the corrective-retry call site (needs a URLProtocol-mocked transport; the builder-level contract is already tested). One risk was deliberately routed to manual verification rather than code: SwiftData lightweight migration of the new array fields over an existing on-device store — covered as the old-session case in the manual-verification table.
+
+### Manual Verification After AI Review
+
+Automated tests for both features are written and green (the run cited above). The hands-on simulator pass — settings persistence, mock-scan summaries, the 唐揚げ warning icon and its alert, in-app photo search, the all-allergens-off case, and old-session migration — is **pending**. It is planned and recorded as the to-be-completed test-case table in `docs/manual-verification.md` (§ 2026-07-12), where every observed result currently reads `pending — 待人手實測`. Real-API (live Gemini) end-to-end testing of the allergen/summary output is likewise still pending, consistent with the rest of this prototype.

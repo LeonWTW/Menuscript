@@ -25,17 +25,20 @@ struct GeminiProvider: MenuVisionProvider {
 
     // MARK: - MenuVisionProvider
 
-    func extractMenu(images: [Data], targetLanguage: String) async throws -> ExtractedMenu {
-        let request = try buildExtractRequest(images: images, targetLanguage: targetLanguage)
+    func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
+        let request = try buildExtractRequest(images: images, targetLanguage: targetLanguage, allergens: allergens)
         let data = try await send(request)
         do {
             return try Self.parseExtractResponse(data)
         } catch VisionProviderError.decodeFailed(let reason) {
             // One corrective retry: identical request, prompt suffixed with the parse error.
             // A second parse failure propagates as .decodeFailed.
+            // `allergens` must ride the rebuild too, or the retry silently downgrades to the
+            // no-allergen prompt/schema.
             let retryRequest = try buildExtractRequest(
                 images: images,
                 targetLanguage: targetLanguage,
+                allergens: allergens,
                 correctiveSuffix: "Your previous output failed to parse: \(reason). Return ONLY valid JSON matching the schema."
             )
             let retryData = try await send(retryRequest)
@@ -57,12 +60,13 @@ struct GeminiProvider: MenuVisionProvider {
     func buildExtractRequest(
         images: [Data],
         targetLanguage: String,
+        allergens: [String] = [],
         correctiveSuffix: String? = nil
     ) throws -> URLRequest {
         let key = try requireAPIKey()
         guard !images.isEmpty else { throw VisionProviderError.invalidImage }
 
-        var prompt = Self.extractPrompt(targetLanguage: targetLanguage)
+        var prompt = Self.extractPrompt(targetLanguage: targetLanguage, allergens: allergens)
         if let correctiveSuffix {
             prompt += "\n\n" + correctiveSuffix
         }
@@ -80,7 +84,7 @@ struct GeminiProvider: MenuVisionProvider {
             "generationConfig": [
                 "temperature": 0.2,
                 "responseMimeType": "application/json",
-                "responseSchema": Self.extractResponseSchema(),
+                "responseSchema": Self.extractResponseSchema(includeAllergens: !allergens.isEmpty),
             ],
         ]
         return try makeRequest(body: body, key: key)
@@ -132,9 +136,28 @@ struct GeminiProvider: MenuVisionProvider {
 
     /// The extraction prompt. Design goals: maximise handwriting recall (best guess +
     /// `lowConfidence`, never skip), merge/dedupe multi-photo menus, and keep prices machine-safe
-    /// (single plain number → `price`; anything else verbatim into `priceNote`).
-    private static func extractPrompt(targetLanguage: String) -> String {
+    /// (single plain number → `price`; anything else verbatim into `priceNote`). Always asks for a
+    /// short `summary`; when `allergens` is non-empty, adds an advisory `possibleAllergens` rule
+    /// constrained to exactly that list (entries verbatim, never invented).
+    private static func extractPrompt(targetLanguage: String, allergens: [String]) -> String {
+        var extraRules = """
+        11. "summary": one short sentence in \(targetLanguage) — aim for at most about 20 characters for CJK \
+        languages, or 8 words otherwise — saying what kind of dish this is. Do NOT repeat the translated name. \
+        Every item must have a "summary".
         """
+        if !allergens.isEmpty {
+            let avoided = allergens.joined(separator: ", ")
+            extraRules += "\n" + """
+            12. The traveller avoids: \(avoided). For "possibleAllergens", return the subset of EXACTLY those \
+            strings that are likely present in a typical recipe of the dish; when an ingredient is plausibly \
+            present, include it (err toward flagging). Menu-printed allergen information (footnotes, ingredient \
+            marks such as ※えび・かに) is authoritative for this field — rule 10's instruction to ignore allergy \
+            footnotes applies only to what counts as a menu item, NOT to this field. Output each entry verbatim \
+            as it was given, NEVER add anything not in that list, and use an empty array when none apply. This is \
+            advisory guidance to help the traveller ask the restaurant — it is NOT a safety guarantee.
+            """
+        }
+        return """
         You are an expert at reading restaurant menus for travellers — including messy handwriting, \
         stylised fonts, vertical CJK text, and photos with glare, blur or odd angles.
 
@@ -170,6 +193,7 @@ struct GeminiProvider: MenuVisionProvider {
         10. Ignore text that is not a menu item: slogans, addresses, phone numbers, opening hours, Wi-Fi info, \
         allergy footnotes. A description or ingredient list printed under an item belongs to that item — \
         it is not a separate item.
+        \(extraRules)
 
         Target language: \(targetLanguage).
         Respond with ONLY the JSON object matching the response schema — no markdown, no code fences, no commentary.
@@ -182,19 +206,35 @@ struct GeminiProvider: MenuVisionProvider {
     /// (Gemini dialect: OBJECT/ARRAY/STRING/BOOLEAN + nullable/propertyOrdering).
     /// `price` is deliberately STRING on the wire: JSON numbers are decoded as binary floats,
     /// so "12.5" as a number could lose precision; we parse the string into `Decimal` ourselves.
-    private static func extractResponseSchema() -> [String: Any] {
+    private static func extractResponseSchema(includeAllergens: Bool) -> [String: Any] {
+        var itemProperties: [String: Any] = [
+            "original": ["type": "STRING", "description": "Item name exactly as written on the menu, original script"],
+            "translated": ["type": "STRING", "description": "Item name translated into the target language"],
+            "summary": ["type": "STRING", "description": "One short sentence in the target language describing what kind of dish this is; never repeats the translated name"],
+            "price": ["type": "STRING", "nullable": true, "description": "Single plain price as a decimal number string, e.g. \"600\" or \"12.5\"; null if none or not a single number"],
+            "priceNote": ["type": "STRING", "nullable": true, "description": "Verbatim price text when price is null (range, market price, set prices)"],
+            "category": ["type": "STRING", "description": "Short category in the target language"],
+            "lowConfidence": ["type": "BOOLEAN", "description": "True when the reading is a guess (handwriting, blur, occlusion)"],
+        ]
+        var required = ["original", "translated", "summary", "category", "lowConfidence"]
+        var propertyOrdering = ["original", "translated", "summary", "price", "priceNote", "category", "lowConfidence"]
+
+        if includeAllergens {
+            let allergenSchema: [String: Any] = [
+                "type": "ARRAY",
+                "items": ["type": "STRING"],
+                "description": "Subset of the traveller's avoided-ingredient list likely present in a typical recipe; each entry verbatim from that list; empty array when none apply; advisory only",
+            ]
+            itemProperties["possibleAllergens"] = allergenSchema
+            required.append("possibleAllergens")
+            propertyOrdering.append("possibleAllergens")
+        }
+
         let itemSchema: [String: Any] = [
             "type": "OBJECT",
-            "properties": [
-                "original": ["type": "STRING", "description": "Item name exactly as written on the menu, original script"],
-                "translated": ["type": "STRING", "description": "Item name translated into the target language"],
-                "price": ["type": "STRING", "nullable": true, "description": "Single plain price as a decimal number string, e.g. \"600\" or \"12.5\"; null if none or not a single number"],
-                "priceNote": ["type": "STRING", "nullable": true, "description": "Verbatim price text when price is null (range, market price, set prices)"],
-                "category": ["type": "STRING", "description": "Short category in the target language"],
-                "lowConfidence": ["type": "BOOLEAN", "description": "True when the reading is a guess (handwriting, blur, occlusion)"],
-            ],
-            "required": ["original", "translated", "category", "lowConfidence"],
-            "propertyOrdering": ["original", "translated", "price", "priceNote", "category", "lowConfidence"],
+            "properties": itemProperties,
+            "required": required,
+            "propertyOrdering": propertyOrdering,
         ]
         return [
             "type": "OBJECT",
@@ -245,7 +285,9 @@ struct GeminiProvider: MenuVisionProvider {
                 price: price,
                 priceNote: priceNote,
                 category: normalized(raw.category) ?? "其他",
-                lowConfidence: raw.lowConfidence ?? false
+                lowConfidence: raw.lowConfidence ?? false,
+                summary: normalized(raw.summary),
+                possibleAllergens: dedupedAllergens(raw.possibleAllergens)
             )
         }
         guard !items.isEmpty else { throw VisionProviderError.emptyMenu }
@@ -289,6 +331,8 @@ struct GeminiProvider: MenuVisionProvider {
             var priceNote: String?
             var category: String?
             var lowConfidence: Bool?
+            var summary: String?
+            var possibleAllergens: [String]?
         }
         var detectedLanguage: String
         var menuCurrency: String
@@ -348,7 +392,7 @@ struct GeminiProvider: MenuVisionProvider {
     /// `Decimal(string:)` alone would silently accept "600〜" as 600.
     private static func wirePriceDecimal(_ raw: String) -> Decimal? {
         let cleaned = raw.replacingOccurrences(of: ",", with: "")
-        guard cleaned.range(of: #"^-?[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else {
+        guard cleaned.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else {
             return nil
         }
         return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
@@ -359,6 +403,20 @@ struct GeminiProvider: MenuVisionProvider {
             return nil
         }
         return trimmed
+    }
+
+    /// Trim, drop empties, then case-insensitively dedupe (first occurrence wins) —
+    /// the model occasionally repeats an entry despite the verbatim instruction,
+    /// and a duplicate would render twice in the allergen alert.
+    private static func dedupedAllergens(_ raw: [String]?) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for entry in raw ?? [] {
+            let trimmed = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 
     /// Compact, English description of a decode error — it is echoed back to the model

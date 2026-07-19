@@ -34,7 +34,7 @@ struct CameraPicker: UIViewControllerRepresentable {
         ) {
             picker.dismiss(animated: true)
             if let image = info[.originalImage] as? UIImage {
-                parent.onImagePicked(image)
+                parent.onImagePicked(ImagePrep.resized(image, maxLongEdge: ImagePrep.captureMaxPixelSize))
             } else {
                 parent.onCancel()
             }

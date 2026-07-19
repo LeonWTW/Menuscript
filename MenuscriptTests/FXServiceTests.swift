@@ -124,4 +124,34 @@ final class FXServiceTests {
         #expect(rate.source == .live)
         #expect(MockURLProtocol.requestCount == 0)
     }
+
+    @Test("Default session enforces a 10s request timeout and 15s resource timeout")
+    func defaultSessionHasTimeouts() {
+        let configuration = FXService.makeDefaultSession().configuration
+        #expect(configuration.timeoutIntervalForRequest == 10)
+        #expect(configuration.timeoutIntervalForResource == 15)
+    }
+
+    @Test("Manual override surfaces the date it was set, not the date it's read")
+    func manualOverrideReturnsSetDate() async throws {
+        let setDate = Date(timeIntervalSince1970: 1_700_000_000)
+        defaults.set(999.0, forKey: "fx.override.USD.JPY")
+        defaults.set(setDate, forKey: "fx.override.date.USD.JPY")
+
+        let rate = try #require(await service.rate(from: "USD", to: "JPY"))
+        #expect(rate.source == .manual)
+        #expect(rate.date == setDate)
+    }
+
+    @Test("Legacy override without a stored timestamp falls back to the current date")
+    func legacyOverrideWithoutTimestampFallsBackToNow() async throws {
+        defaults.set(999.0, forKey: "fx.override.USD.JPY")
+
+        let before = Date()
+        let rate = try #require(await service.rate(from: "USD", to: "JPY"))
+        let after = Date()
+
+        #expect(rate.source == .manual)
+        #expect(rate.date >= before && rate.date <= after)
+    }
 }

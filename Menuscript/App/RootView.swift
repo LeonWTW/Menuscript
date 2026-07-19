@@ -8,7 +8,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MenuSession.createdAt, order: .reverse) private var sessions: [MenuSession]
     @State private var navigationPath: [MenuSession] = []
-    @State private var captureViewModel: CaptureViewModel?
+    @Binding var captureViewModel: CaptureViewModel?
     @State private var showSettings = false
     @State private var showCancelCaptureConfirm = false
 
@@ -177,6 +177,6 @@ private struct HistoryRow: View {
 }
 
 #Preview {
-    RootView()
+    RootView(captureViewModel: .constant(nil))
         .modelContainer(for: MenuSession.self, inMemory: true)
 }

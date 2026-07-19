@@ -23,6 +23,21 @@ final class GeminiRequestTests: XCTestCase {
         return try XCTUnwrap(contents[0]["parts"] as? [[String: Any]])
     }
 
+    /// The prompt text (last part) of an extract request.
+    private func promptText(of request: URLRequest) throws -> String {
+        try XCTUnwrap(try parts(of: request).last?["text"] as? String)
+    }
+
+    /// Navigates body → generationConfig.responseSchema → items.items (the per-dish OBJECT schema).
+    private func itemSchema(of request: URLRequest) throws -> [String: Any] {
+        let body = try bodyJSON(of: request)
+        let config = try XCTUnwrap(body["generationConfig"] as? [String: Any])
+        let schema = try XCTUnwrap(config["responseSchema"] as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let itemsSchema = try XCTUnwrap(properties["items"] as? [String: Any])
+        return try XCTUnwrap(itemsSchema["items"] as? [String: Any])
+    }
+
     func testURLContainsModelIdAndGenerateContent() throws {
         let request = try makeProvider().buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")
         let url = try XCTUnwrap(request.url?.absoluteString)
@@ -117,6 +132,84 @@ final class GeminiRequestTests: XCTestCase {
         let parts = try parts(of: request)
         let text = try XCTUnwrap(parts.last?["text"] as? String)
         XCTAssertTrue(text.hasSuffix(suffix))
+    }
+
+    // MARK: - Allergen & summary extraction contract
+
+    func testAllergenRuleAndListPresentOnlyWhenAllergensNonEmpty() throws {
+        let withAllergens = try makeProvider().buildExtractRequest(
+            images: [imageA], targetLanguage: "繁體中文", allergens: ["peanut", "soy"]
+        )
+        let promptWith = try promptText(of: withAllergens)
+        XCTAssertTrue(promptWith.contains("The traveller avoids"), "allergen rule must be present")
+        XCTAssertTrue(promptWith.contains("possibleAllergens"), "allergen rule names the possibleAllergens field")
+        XCTAssertTrue(promptWith.contains("peanut, soy"), "the joined avoided list appears verbatim")
+        XCTAssertTrue(
+            promptWith.contains("Menu-printed allergen information"),
+            "rule 12 must override rule 10's ignore-allergy-footnotes instruction for this field"
+        )
+
+        let withoutAllergens = try makeProvider().buildExtractRequest(
+            images: [imageA], targetLanguage: "繁體中文", allergens: []
+        )
+        let promptWithout = try promptText(of: withoutAllergens)
+        XCTAssertFalse(promptWithout.contains("The traveller avoids"), "no allergen rule when the list is empty")
+        XCTAssertFalse(promptWithout.contains("possibleAllergens"), "no allergen field mentioned when the list is empty")
+    }
+
+    func testSummaryRuleAlwaysPresentRegardlessOfAllergens() throws {
+        for allergens in [[], ["peanut"]] as [[String]] {
+            let request = try makeProvider().buildExtractRequest(
+                images: [imageA], targetLanguage: "繁體中文", allergens: allergens
+            )
+            let prompt = try promptText(of: request)
+            XCTAssertTrue(prompt.contains("\"summary\""), "summary rule present (allergens=\(allergens))")
+        }
+    }
+
+    func testItemSchemaAlwaysHasSummaryInPropertiesAndRequired() throws {
+        for allergens in [[], ["peanut"]] as [[String]] {
+            let request = try makeProvider().buildExtractRequest(
+                images: [imageA], targetLanguage: "繁體中文", allergens: allergens
+            )
+            let item = try itemSchema(of: request)
+            let properties = try XCTUnwrap(item["properties"] as? [String: Any])
+            let summarySchema = try XCTUnwrap(properties["summary"] as? [String: Any], "summary in properties (allergens=\(allergens))")
+            XCTAssertEqual(summarySchema["type"] as? String, "STRING")
+            let required = try XCTUnwrap(item["required"] as? [String])
+            XCTAssertTrue(required.contains("summary"), "summary required (allergens=\(allergens))")
+        }
+    }
+
+    func testItemSchemaHasPossibleAllergensOnlyWhenAllergensNonEmpty() throws {
+        let withItem = try itemSchema(of: makeProvider().buildExtractRequest(
+            images: [imageA], targetLanguage: "繁體中文", allergens: ["peanut"]
+        ))
+        let withProps = try XCTUnwrap(withItem["properties"] as? [String: Any])
+        let allergenSchema = try XCTUnwrap(withProps["possibleAllergens"] as? [String: Any])
+        XCTAssertEqual(allergenSchema["type"] as? String, "ARRAY")
+        XCTAssertTrue(try XCTUnwrap(withItem["required"] as? [String]).contains("possibleAllergens"))
+
+        let withoutItem = try itemSchema(of: makeProvider().buildExtractRequest(
+            images: [imageA], targetLanguage: "繁體中文", allergens: []
+        ))
+        let withoutProps = try XCTUnwrap(withoutItem["properties"] as? [String: Any])
+        XCTAssertNil(withoutProps["possibleAllergens"], "no allergen field when the list is empty")
+        XCTAssertFalse(try XCTUnwrap(withoutItem["required"] as? [String]).contains("possibleAllergens"))
+    }
+
+    func testAllergensAndCorrectiveSuffixCoexistInRebuild() throws {
+        // Guards the corrective-retry path: rebuilding with a suffix must NOT drop allergens.
+        let suffix = "Your previous output failed to parse: missing key 'items' at root. Return ONLY valid JSON matching the schema."
+        let request = try makeProvider().buildExtractRequest(
+            images: [imageA], targetLanguage: "繁體中文", allergens: ["peanut", "soy"], correctiveSuffix: suffix
+        )
+        let prompt = try promptText(of: request)
+        XCTAssertTrue(prompt.contains("peanut, soy"), "allergen list survives the corrective rebuild")
+        XCTAssertTrue(prompt.hasSuffix(suffix), "corrective suffix still appended after the allergen rule")
+
+        let properties = try XCTUnwrap(try itemSchema(of: request)["properties"] as? [String: Any])
+        XCTAssertNotNil(properties["possibleAllergens"], "allergen schema survives the corrective rebuild")
     }
 
     func testExplainRequestIsPlainTextWithDishAndLanguages() throws {

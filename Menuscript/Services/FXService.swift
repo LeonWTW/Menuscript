@@ -9,6 +9,15 @@ struct FXRate: Equatable, Sendable {
         case live
         case cached
         case manual
+
+        /// The string form persisted on `MenuSession.fxSource`.
+        var persistedValue: String {
+            switch self {
+            case .live: return "live"
+            case .cached: return "cached"
+            case .manual: return "manual"
+            }
+        }
     }
 }
 
@@ -20,9 +29,19 @@ final class FXService: @unchecked Sendable {
     private let session: URLSession
     private let defaults: UserDefaults
 
-    init(session: URLSession = .shared, defaults: UserDefaults = .standard) {
+    init(session: URLSession = FXService.makeDefaultSession(), defaults: UserDefaults = .standard) {
         self.session = session
         self.defaults = defaults
+    }
+
+    /// `.shared`'s default configuration has no per-request timeout; FX
+    /// lookups sit on the critical path right after a successful (paid)
+    /// Gemini extraction, so a blackholed host must not hang indefinitely.
+    static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        configuration.timeoutIntervalForResource = 15
+        return URLSession(configuration: configuration)
     }
 
     func rate(from: String, to: String) async -> FXRate? {
@@ -35,7 +54,8 @@ final class FXService: @unchecked Sendable {
 
         let overrideValue = defaults.double(forKey: Self.overrideKey(from: from, to: to))
         if overrideValue > 0 {
-            return FXRate(rate: overrideValue, date: Date(), source: .manual)
+            let overrideDate = defaults.object(forKey: Self.overrideDateKey(from: from, to: to)) as? Date ?? Date()
+            return FXRate(rate: overrideValue, date: overrideDate, source: .manual)
         }
 
         let cacheKey = Self.cacheKey(from: from, to: to)
@@ -57,11 +77,16 @@ final class FXService: @unchecked Sendable {
     }
 
     func setManualOverride(_ rate: Double?, from: String, to: String) {
-        let key = Self.overrideKey(from: from.uppercased(), to: to.uppercased())
+        let from = from.uppercased()
+        let to = to.uppercased()
+        let key = Self.overrideKey(from: from, to: to)
+        let dateKey = Self.overrideDateKey(from: from, to: to)
         if let rate {
             defaults.set(rate, forKey: key)
+            defaults.set(Date(), forKey: dateKey)
         } else {
             defaults.removeObject(forKey: key)
+            defaults.removeObject(forKey: dateKey)
         }
     }
 
@@ -101,6 +126,10 @@ final class FXService: @unchecked Sendable {
 
     private static func overrideKey(from: String, to: String) -> String {
         "fx.override.\(from).\(to)"
+    }
+
+    private static func overrideDateKey(from: String, to: String) -> String {
+        "fx.override.date.\(from).\(to)"
     }
 
     private static func cacheKey(from: String, to: String) -> String {

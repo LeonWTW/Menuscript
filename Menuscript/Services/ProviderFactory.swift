@@ -17,7 +17,7 @@ enum ProviderFactory {
             return nil
         }
 
-        let model = defaults.string(forKey: SettingsKeys.geminiModel) ?? "gemini-2.5-flash"
+        let model = SettingsKeys.nonEmptyString(SettingsKeys.geminiModel, from: defaults, default: "gemini-2.5-flash")
         return GeminiProvider(apiKey: { apiKey }, model: model)
     }
 }

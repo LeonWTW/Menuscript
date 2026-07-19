@@ -72,8 +72,16 @@ final class CaptureViewModel: Identifiable {
         defer { isRecognizing = false }
 
         let defaults = UserDefaults.standard
-        let targetLanguage = defaults.string(forKey: SettingsKeys.targetLanguage) ?? SettingsKeys.defaultTargetLanguage()
-        let homeCurrency = defaults.string(forKey: SettingsKeys.homeCurrency) ?? "USD"
+        let targetLanguage = SettingsKeys.nonEmptyString(
+            SettingsKeys.targetLanguage, from: defaults, default: SettingsKeys.defaultTargetLanguage()
+        )
+        let homeCurrency = SettingsKeys.nonEmptyString(SettingsKeys.homeCurrency, from: defaults, default: "USD")
+        // Free-text / comma-joined settings: read raw — an empty value is a
+        // valid "no allergens" state, not a fall-back-to-default like the reads above.
+        let allergens = Allergen.parse(
+            presets: defaults.string(forKey: SettingsKeys.allergenPresets) ?? "",
+            custom: defaults.string(forKey: SettingsKeys.allergenCustom) ?? ""
+        )
 
         let provider: MenuVisionProvider
         if let injectedProvider {
@@ -89,13 +97,20 @@ final class CaptureViewModel: Identifiable {
             // Downscale/encode off the main actor: at 6 full-res photos this is
             // ~1-3s of JPEG work that would otherwise stall the UI before the
             // recognising overlay even has a chance to render.
-            let imageData = await Task.detached(priority: .userInitiated) { [photos] in
-                photos.compactMap { ImagePrep.jpegData(from: $0) }
+            let recognizedPhotos = photos
+            let imageData = await Task.detached(priority: .userInitiated) { [recognizedPhotos] in
+                recognizedPhotos.compactMap { ImagePrep.jpegData(from: $0) }
             }.value
-            let extracted = try await provider.extractMenu(images: imageData, targetLanguage: targetLanguage)
+            let extracted = try await provider.extractMenu(images: imageData, targetLanguage: targetLanguage, allergens: allergens)
             guard !Task.isCancelled else { return }
 
-            let fxRate = await fxService.rate(from: extracted.menuCurrency, to: homeCurrency)
+            let fxRate: FXRate?
+            if extracted.menuCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                == homeCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+                fxRate = nil
+            } else {
+                fxRate = await fxService.rate(from: extracted.menuCurrency, to: homeCurrency)
+            }
             guard !Task.isCancelled else { return }
 
             let items = extracted.items.enumerated().map { index, item in
@@ -106,6 +121,8 @@ final class CaptureViewModel: Identifiable {
                     priceNote: item.priceNote,
                     category: item.category,
                     lowConfidence: item.lowConfidence,
+                    summary: item.summary,
+                    possibleAllergens: item.possibleAllergens,
                     quantity: 0,
                     sortOrder: index
                 )
@@ -119,7 +136,9 @@ final class CaptureViewModel: Identifiable {
                 homeCurrency: homeCurrency,
                 fxRate: fxRate?.rate,
                 fxRateDate: fxRate?.date,
+                fxSource: fxRate?.source.persistedValue,
                 photos: imageData,
+                allergenProfile: allergens,
                 items: items
             )
 
@@ -127,7 +146,11 @@ final class CaptureViewModel: Identifiable {
             modelContext.insert(session)
             try modelContext.save()
             completedSession = session
-            photos.removeAll()
+            // Remove by identity, not removeAll(): photos appended to the
+            // staging grid after `recognizedPhotos` was snapshotted above
+            // must survive, since they were never sent for recognition.
+            let recognizedIDs = Set(recognizedPhotos.map(ObjectIdentifier.init))
+            photos.removeAll { recognizedIDs.contains(ObjectIdentifier($0)) }
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = (error as? VisionProviderError)?.errorDescription ?? error.localizedDescription

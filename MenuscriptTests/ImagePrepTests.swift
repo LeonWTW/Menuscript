@@ -20,6 +20,22 @@ struct ImagePrepTests {
         #expect(abs(decodedRatio - originalRatio) < 0.01)
     }
 
+    @Test("Large picked-photo data downsamples through the pixel cap, aspect preserved")
+    func downsamplesThroughPixelCap() throws {
+        let image = Self.solidImage(size: CGSize(width: 5000, height: 4000))
+        let data = try #require(image.jpegData(compressionQuality: 0.9))
+
+        let maxPixelSize = ImagePrep.captureMaxPixelSize
+        let decoded = try #require(ImagePrep.downsampledImage(from: data, maxPixelSize: maxPixelSize))
+
+        let longEdge = max(decoded.size.width, decoded.size.height)
+        #expect(longEdge <= maxPixelSize)
+
+        let originalRatio = 5000.0 / 4000.0
+        let decodedRatio = decoded.size.width / decoded.size.height
+        #expect(abs(decodedRatio - originalRatio) < 0.01)
+    }
+
     @Test("Small image is left un-upscaled")
     func doesNotUpscaleSmallImage() throws {
         let image = Self.solidImage(size: CGSize(width: 800, height: 600))

@@ -10,6 +10,8 @@ final class MenuItem {
     var category: String
     var lowConfidence: Bool
     var explanation: String?
+    var summary: String?
+    var possibleAllergens: [String] = []
     var quantity: Int
     var sortOrder: Int
     var session: MenuSession?
@@ -22,6 +24,8 @@ final class MenuItem {
         category: String,
         lowConfidence: Bool = false,
         explanation: String? = nil,
+        summary: String? = nil,
+        possibleAllergens: [String] = [],
         quantity: Int = 0,
         sortOrder: Int,
         session: MenuSession? = nil
@@ -33,6 +37,8 @@ final class MenuItem {
         self.category = category
         self.lowConfidence = lowConfidence
         self.explanation = explanation
+        self.summary = summary
+        self.possibleAllergens = possibleAllergens
         self.quantity = quantity
         self.sortOrder = sortOrder
         self.session = session

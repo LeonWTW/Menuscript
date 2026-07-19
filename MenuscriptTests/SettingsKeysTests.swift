@@ -34,3 +34,53 @@ struct SettingsKeysDefaultTargetLanguageTests {
         #expect(SettingsKeys.defaultTargetLanguage(appLanguage: .system, systemLocale: Locale(identifier: identifier)) == "繁體中文")
     }
 }
+
+/// Covers `SettingsKeys.nonEmptyString`: a cleared free-text `@AppStorage`
+/// field persists `""` (never `nil`), which plain `defaults.string(forKey:)
+/// ?? fallback` never catches since `??` only fires on `nil`. Every case here
+/// uses an isolated `UserDefaults` suite so tests never race on shared state.
+@Suite("SettingsKeys.nonEmptyString")
+struct SettingsKeysNonEmptyStringTests {
+    private let suiteName = "test.settingskeys.\(UUID().uuidString)"
+    private let key = "test.nonEmptyString.key"
+    private let defaults: UserDefaults
+
+    init() throws {
+        defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test("Missing key falls back to the default")
+    func missingKeyFallsBackToDefault() {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        #expect(SettingsKeys.nonEmptyString(key, from: defaults, default: "fallback") == "fallback")
+    }
+
+    @Test("Empty string falls back to the default")
+    func emptyStringFallsBackToDefault() {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("", forKey: key)
+        #expect(SettingsKeys.nonEmptyString(key, from: defaults, default: "fallback") == "fallback")
+    }
+
+    @Test("Whitespace-only string falls back to the default")
+    func whitespaceOnlyStringFallsBackToDefault() {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("   \n", forKey: key)
+        #expect(SettingsKeys.nonEmptyString(key, from: defaults, default: "fallback") == "fallback")
+    }
+
+    @Test("Value with surrounding whitespace is trimmed")
+    func valueWithSurroundingWhitespaceIsTrimmed() {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(" gemini-x ", forKey: key)
+        #expect(SettingsKeys.nonEmptyString(key, from: defaults, default: "fallback") == "gemini-x")
+    }
+
+    @Test("Normal value passes through unchanged")
+    func normalValuePassesThrough() {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("gemini-2.5-pro", forKey: key)
+        #expect(SettingsKeys.nonEmptyString(key, from: defaults, default: "fallback") == "gemini-2.5-pro")
+    }
+}

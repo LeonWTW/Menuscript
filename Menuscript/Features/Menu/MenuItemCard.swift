@@ -9,26 +9,49 @@ struct MenuItemCard: View {
     let homeCurrency: String
     let fxRate: Double?
     var onExplain: (MenuItem) -> Void
+    var onPhotoSearch: (MenuItem) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showAllergenAlert = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        cardBody
+            .alert(Text("可能含有敏感原"), isPresented: $showAllergenAlert) {
+                Button("確定") { }
+            } message: {
+                Text(allergenAlertMessage)
+            }
+    }
+
+    /// The card surface plus, when the dish has flagged allergens, a VoiceOver
+    /// custom action that opens the same alert as the (a11y-hidden) icon button.
+    @ViewBuilder
+    private var cardBody: some View {
+        let card = VStack(alignment: .leading, spacing: 12) {
             header
             footer
         }
         .padding(MTSpacing.cardPadding)
         .background(cardBackground)
         .accessibilityElement(children: .contain)
+
+        if item.possibleAllergens.isEmpty {
+            card
+        } else {
+            card.accessibilityAction(named: Text("顯示敏感原警告")) {
+                showAllergenAlert = true
+            }
+        }
     }
 
-    // MARK: - Header (name + explain button)
+    // MARK: - Header (name + actions)
 
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             nameBlock
             Spacer(minLength: 8)
+            photoButton
             explainButton
         }
     }
@@ -46,15 +69,56 @@ struct MenuItemCard: View {
                         .foregroundStyle(Color.mtWarning)
                         .accessibilityHidden(true)
                 }
+                if !item.possibleAllergens.isEmpty {
+                    allergenButton
+                }
             }
             Text(item.originalName)
                 .font(.mtOriginalName)
                 .foregroundStyle(Color.mtTextSecondary)
                 .lineLimit(2)
                 .textSelection(.enabled)
+            if let summary = item.summary, !summary.isEmpty {
+                Text(verbatim: summary)
+                    .font(.footnote)
+                    .foregroundStyle(Color.mtTextSecondary)
+                    .lineLimit(2)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
+    }
+
+    /// Advisory allergen marker. VoiceOver reaches the alert through the card's
+    /// custom action and the spoken summary, so the icon itself is hidden.
+    private var allergenButton: some View {
+        Button {
+            showAllergenAlert = true
+        } label: {
+            Image(systemName: "allergens")
+                .font(.footnote)
+                .foregroundStyle(Color.mtWarning)
+                // The glyph stays footnote-sized inline with the dish name; the
+                // negative inset grows the tap target to ~45pt (HIG minimum)
+                // without disturbing the baseline layout.
+                .contentShape(Rectangle().inset(by: -14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+    }
+
+    private var photoButton: some View {
+        Button {
+            onPhotoSearch(item)
+        } label: {
+            Image(systemName: "photo")
+                .font(.body)
+                .foregroundStyle(Color.mtTextSecondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("搵菜式相片")
     }
 
     private var explainButton: some View {
@@ -129,10 +193,25 @@ struct MenuItemCard: View {
         } else {
             text += L10n.string("，%@", item.priceNote ?? L10n.string("時價"))
         }
+        if let summary = item.summary, !summary.isEmpty {
+            text += L10n.string("，%@", summary)
+        }
         if item.lowConfidence {
             text += L10n.string("，翻譯可能不準確")
         }
+        if !item.possibleAllergens.isEmpty {
+            let labels = item.possibleAllergens.map(Allergen.displayLabel)
+                .joined(separator: L10n.string("、"))
+            text += L10n.string("，可能含有 %@，請與餐廳確認", labels)
+        }
         return text
+    }
+
+    private var allergenAlertMessage: String {
+        let labels = item.possibleAllergens.map(Allergen.displayLabel)
+            .joined(separator: L10n.string("、"))
+        let disclaimer = L10n.string("AI 推測僅供參考，落單前請務必同餐廳確認。")
+        return labels.isEmpty ? disclaimer : labels + "\n\n" + disclaimer
     }
 
     // MARK: - Card chrome
@@ -168,7 +247,8 @@ struct MenuItemCard: View {
                 menuCurrency: "JPY",
                 homeCurrency: "USD",
                 fxRate: 0.052,
-                onExplain: { _ in }
+                onExplain: { _ in },
+                onPhotoSearch: { _ in }
             )
             MenuItemCard(
                 item: MenuItem(
@@ -181,21 +261,47 @@ struct MenuItemCard: View {
                 menuCurrency: "JPY",
                 homeCurrency: "USD",
                 fxRate: 0.052,
-                onExplain: { _ in }
+                onExplain: { _ in },
+                onPhotoSearch: { _ in }
             )
             MenuItemCard(
-                item: MenuItem(
-                    originalName: "生ビール",
-                    translatedName: "生啤",
-                    priceValue: 550,
-                    category: "飲品",
-                    quantity: 2,
-                    sortOrder: 2
-                ),
+                item: {
+                    let item = MenuItem(
+                        originalName: "生ビール",
+                        translatedName: "生啤",
+                        priceValue: 550,
+                        category: "飲品",
+                        quantity: 2,
+                        sortOrder: 2
+                    )
+                    item.summary = "日式生啤酒，冰凍暢飲"
+                    item.possibleAllergens = ["gluten", "wheat"]
+                    return item
+                }(),
                 menuCurrency: "JPY",
                 homeCurrency: "USD",
                 fxRate: nil,
-                onExplain: { _ in }
+                onExplain: { _ in },
+                onPhotoSearch: { _ in }
+            )
+            MenuItemCard(
+                item: {
+                    let item = MenuItem(
+                        originalName: "季節野菜",
+                        translatedName: "時令蔬菜",
+                        priceValue: 680,
+                        category: "前菜",
+                        quantity: 0,
+                        sortOrder: 3
+                    )
+                    item.summary = "當造時令蔬菜，清爽開胃"
+                    return item
+                }(),
+                menuCurrency: "JPY",
+                homeCurrency: "USD",
+                fxRate: 0.052,
+                onExplain: { _ in },
+                onPhotoSearch: { _ in }
             )
         }
         .padding(MTSpacing.screenMargin)

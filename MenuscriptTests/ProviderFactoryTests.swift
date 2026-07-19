@@ -47,4 +47,23 @@ struct ProviderFactoryTests {
         let provider = try #require(ProviderFactory.resolve(keychain: keychain, defaults: defaults))
         #expect(provider is GeminiProvider)
     }
+
+    @Test("Empty-string model key still yields a provider configured with the default model")
+    func emptyStringModelKeyStillYieldsDefaultModel() throws {
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: SettingsKeys.useMockProvider)
+        defaults.set("", forKey: SettingsKeys.geminiModel)
+
+        let keychain = KeychainStore(service: service)
+        try keychain.set("fake-test-api-key", forKey: KeychainStore.geminiAPIKey)
+        defer { try? keychain.delete(KeychainStore.geminiAPIKey) }
+
+        let resolved = try #require(ProviderFactory.resolve(keychain: keychain, defaults: defaults))
+        let provider = try #require(resolved as? GeminiProvider)
+        // No `model` property to introspect directly; the model id lands in
+        // the request URL, same seam GeminiRequestTests uses.
+        let request = try provider.buildExtractRequest(images: [Data([0xFF])], targetLanguage: "繁體中文")
+        let url = try #require(request.url?.absoluteString)
+        #expect(url.contains("gemini-2.5-flash"))
+    }
 }

@@ -75,7 +75,7 @@ struct BillView: View {
 
     /// Total converted to home currency, when an FX rate is available.
     private var convertedTotal: Decimal? {
-        guard let fxRate = session.fxRate else { return nil }
+        guard let fxRate = session.effectiveFXRate else { return nil }
         return BillMath.converted(total, rate: fxRate)
     }
 
@@ -254,12 +254,15 @@ struct BillView: View {
     }
 
     private var fxStatusText: String {
-        guard let fxRate = session.fxRate else {
+        guard let fxRate = session.effectiveFXRate else {
             return L10n.string("攞唔到 %@→%@ 匯率，可以喺設定入面手動輸入", session.menuCurrency, session.homeCurrency)
         }
         let rateText = String(format: "%.4f", fxRate)
         let dateText = session.fxRateDate.map { Self.fxDateFormatter.string(from: $0) }
         let rateDescription = L10n.string("匯率 1 %@ ≈ %@ %@", session.menuCurrency, rateText, session.homeCurrency)
+        if session.fxSource == "manual" {
+            return dateText.map { L10n.string("%@（手動設定於 %@）", rateDescription, $0) } ?? L10n.string("%@（手動設定）", rateDescription)
+        }
         return dateText.map { L10n.string("%@（%@）", rateDescription, $0) } ?? rateDescription
     }
 
@@ -284,11 +287,13 @@ struct BillView: View {
     }
 
     private func refreshFXRate() async {
+        guard session.menuCurrency.uppercased() != session.homeCurrency.uppercased() else { return }
         isRefreshingRate = true
         defer { isRefreshingRate = false }
         guard let fresh = await FXService().rate(from: session.menuCurrency, to: session.homeCurrency) else { return }
         session.fxRate = fresh.rate
         session.fxRateDate = fresh.date
+        session.fxSource = fresh.source.persistedValue
     }
 
     private func summaryRow(label: LocalizedStringKey, value: String) -> some View {

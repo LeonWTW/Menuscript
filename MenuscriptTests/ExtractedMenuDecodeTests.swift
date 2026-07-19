@@ -145,6 +145,26 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[3].price, Decimal(1200))
     }
 
+    // Regression: negative price strings must not parse as a price — menu prices
+    // are never negative, and an unguarded negative would silently reduce bill
+    // totals. It falls through to priceNote like any other non-numeric price text.
+    func testNegativePriceFallsThroughToPriceNote() throws {
+        let inner = """
+        {
+          "detectedLanguage": "英文",
+          "menuCurrency": "USD",
+          "restaurantName": null,
+          "items": [
+            {"original": "Mystery Item", "translated": "神秘餐點", "price": "-500", "priceNote": null, "category": "主食", "lowConfidence": false}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+
+        XCTAssertNil(menu.items[0].price)
+        XCTAssertEqual(menu.items[0].priceNote, "-500")
+    }
+
     // Defensive: model wrapped its JSON in a markdown fence despite instructions.
     func testCodeFencedInnerJSONIsStillParsed() throws {
         let inner = """
@@ -193,5 +213,73 @@ final class ExtractedMenuDecodeTests: XCTestCase {
                 return XCTFail("expected .decodeFailed, got \(error)")
             }
         }
+    }
+
+    // Summary + possibleAllergens present on the wire decode onto the domain Item.
+    func testSummaryAndPossibleAllergensDecodeOntoItem() throws {
+        let inner = """
+        {
+          "detectedLanguage": "日文",
+          "menuCurrency": "JPY",
+          "restaurantName": null,
+          "items": [
+            {"original": "担々麺", "translated": "擔擔麵", "summary": "香辣芝麻湯底拉麵", "price": "980", "priceNote": null, "category": "主食", "lowConfidence": false, "possibleAllergens": ["peanut"]}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+        XCTAssertEqual(menu.items[0].summary, "香辣芝麻湯底拉麵")
+        XCTAssertEqual(menu.items[0].possibleAllergens, ["peanut"])
+    }
+
+    // Legacy payload without the new keys still decodes: summary nil, possibleAllergens [].
+    func testLegacyPayloadWithoutNewKeysDecodesWithDefaults() throws {
+        let inner = """
+        {
+          "detectedLanguage": "日文",
+          "menuCurrency": "JPY",
+          "restaurantName": null,
+          "items": [
+            {"original": "焼き鳥", "translated": "燒雞串", "price": "180", "priceNote": null, "category": "燒烤", "lowConfidence": false}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+        XCTAssertNil(menu.items[0].summary)
+        XCTAssertEqual(menu.items[0].possibleAllergens, [])
+    }
+
+    // Whitespace-only summary normalises to nil; blank allergen entries are trimmed away.
+    func testWhitespaceOnlySummaryNormalisesToNil() throws {
+        let inner = """
+        {
+          "detectedLanguage": "日文",
+          "menuCurrency": "JPY",
+          "restaurantName": null,
+          "items": [
+            {"original": "枝豆", "translated": "毛豆", "summary": "   ", "price": "300", "priceNote": null, "category": "前菜", "lowConfidence": false, "possibleAllergens": ["  ", "soy"]}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+        XCTAssertNil(menu.items[0].summary)
+        XCTAssertEqual(menu.items[0].possibleAllergens, ["soy"])
+    }
+
+    // The model occasionally repeats an entry despite the verbatim instruction;
+    // duplicates (exact, case-variant, or padded) must not render twice in the alert.
+    func testDuplicatePossibleAllergensAreDeduped() throws {
+        let inner = """
+        {
+          "detectedLanguage": "日文",
+          "menuCurrency": "JPY",
+          "restaurantName": null,
+          "items": [
+            {"original": "味噌ラーメン", "translated": "味噌拉麵", "summary": "濃郁味噌湯底拉麵", "price": "900", "priceNote": null, "category": "主食", "lowConfidence": false, "possibleAllergens": ["soy", "Soy", " soy ", "wheat"]}
+          ]
+        }
+        """
+        let menu = try GeminiProvider.parseExtractResponse(envelope(innerText: inner))
+        XCTAssertEqual(menu.items[0].possibleAllergens, ["soy", "wheat"])
     }
 }

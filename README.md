@@ -13,12 +13,12 @@ A core design principle: recognition quality on hard, handwritten menus is the p
 Prototype/spike stage — the core flow is implemented and working (milestones M1–M6 plus a bilingual-UI pass; see git history):
 
 - **Capture** — multi-photo menu capture from the camera or photo library, feeding directly into the recognition pipeline.
-- **Menu** — categorized, translated dish cards with quantity controls; an on-demand AI "explain this dish" sheet, cached per dish; builds the cart.
+- **Menu** — categorized, translated dish cards with a one-line AI summary per dish, advisory allergen warning icons, quantity controls, and one-tap Google Images photo search in an in-app browser; an on-demand AI "explain this dish" sheet, cached per dish; builds the cart.
 - **Bill** — subtotal, configurable surcharge/tax, even ("AA") split across diners, converted to the home currency via live FX rates with a cached fallback if the FX API is unreachable.
-- **Settings** — bring-your-own Gemini API key (Keychain-backed, never bundled with the app), model selection (default `gemini-2.5-flash`), target language, home currency, a mock-provider toggle, and app UI language (Traditional Chinese / English).
+- **Settings** — bring-your-own Gemini API key (Keychain-backed, never bundled with the app), model selection (default `gemini-2.5-flash`), target language, a food-allergy filter (11 common presets + free-text custom), home currency, a mock-provider toggle, and app UI language (Traditional Chinese / English).
 - **History** (the root screen) — past sessions — photos, recognized items, bill — persisted locally with SwiftData and reopenable.
 
-Test suite: **46 tests across 12 suites, all passing** (`xcodebuild test`, iPhone 17 simulator, iOS 26.3 runtime — see Quickstart below to reproduce).
+Test suite: **115 tests, all passing — 82 Swift Testing tests across 18 suites + 33 XCTest tests** (`xcodebuild test`, iPhone 17 Pro simulator, iOS 26.3 runtime — see Quickstart below to reproduce).
 
 See [Intentionally Deferred Features](#intentionally-deferred-features) below for what's explicitly out of scope for this prototype.
 
@@ -42,7 +42,7 @@ Build and run (`Cmd+R`) on an iOS 17+ simulator or device. On first launch, eith
 
 ```bash
 xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript \
-  -destination 'platform=iOS Simulator,name=iPhone 17'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
 ## Expected Behavior
@@ -52,9 +52,11 @@ Running one full feature slice end to end, from a fresh launch:
 1. **Launch** — the app opens on **History** (the root screen), showing past sessions if any exist, or an empty state on first run.
 2. **Capture** — start a new session; take a photo of a menu with the camera, or pick one or more photos from the library. Multi-photo capture is supported for menus that span several pages.
 3. **Recognition** — the captured photo(s) are sent to the active vision provider (mock or Gemini, per the Settings toggle). A loading state is shown while recognition runs.
-4. **Menu** — the recognized menu renders as categorized, translated dish cards (original name, translated name, price). Tapping a dish opens an on-demand, plain-language AI explanation (cached after the first request); quantity controls on each card build the order.
+4. **Menu** — the recognized menu renders as categorized, translated dish cards (original name, translated name, price), each with a one-line AI summary of what the dish is shown under the original name. Tapping a dish opens an on-demand, plain-language AI explanation (cached after the first request, and kept separate from the always-on summary); quantity controls on each card build the order. Each card also has a **photo button** that opens an in-app Safari view (`SFSafariViewController`, without leaving the app) searching Google Images for the dish's original-language name, so you can see roughly what it looks like. If you have configured any food-sensitivity allergens (see below), a dish that may contain one of them shows an **allergen warning icon**; tapping it opens an alert listing the specific flagged allergens alongside an advisory-only disclaimer — the app never states that a dish is safe, and always tells you to confirm with the restaurant.
 5. **Order → Bill** — proceeding from the built order computes a subtotal, applies the configurable surcharge/tax, splits the total evenly ("AA") across a chosen number of diners, and converts the home-currency total using a live FX rate (or the last cached rate if the FX API is unreachable).
 6. **History** — completing the session saves the photos, recognized/translated items, and bill to local storage (SwiftData); it appears at the top of the History list and can be reopened to review the same data later.
+
+**Food sensitivities (Settings).** Settings includes a **食物敏感 (food-sensitivity)** section where you can toggle any of eleven preset allergens — the US "Big 9" (peanut, tree nuts, milk, egg, fish, crustacean shellfish, soy, wheat, sesame) plus gluten and molluscs — and add free-text custom allergens. When any are set, they are passed into the recognition prompt so the vision model can flag dishes that, by typical recipe, may contain them. These flags are advisory only and, by design, apply only to menus recognized *after* the setting is changed — sessions already in History are not retroactively re-checked (each session records the allergen profile that was in effect when it was recognized, and the Menu shows a footnote making that "as recognized" scope explicit).
 
 **With the mock provider** (Settings → mock-provider toggle on, no API key required): recognition returns a fixed, deterministic sample menu instantly, with no network call. This is the fastest way to exercise the full Capture → Menu → Bill → History flow, including on the simulator, and is what the current automated test suite and day-to-day development exercise against.
 
@@ -70,6 +72,8 @@ These are explicitly out of scope for the current prototype — not oversights, 
 - **Offline-first recognition** — the app requires network access to reach the LLM provider; there's no on-device recognition fallback.
 - **Social sharing / exporting translated menus** — not implemented.
 - **Any custom backend server** — the app talks directly to third-party APIs (Gemini, Frankfurter) from the client; a backend proxy (e.g. to avoid bring-your-own-key) is a possible future direction, not current scope.
+- **A distinct "danger" color for allergen warnings** — the allergen warning icon currently reuses the same amber warning color (`mtWarning`) as the low-confidence indicator, distinguished only by icon shape; adding a dedicated red danger color token to the theme is deferred.
+- **Retroactive allergen re-checking of past sessions** — changing the food-sensitivity settings only affects menus recognized afterward; already-saved sessions are not re-analyzed against the updated allergen list (each session keeps the allergen profile it was recognized under, and the Menu footnote makes that scope explicit).
 
 ## Project Documents
 
