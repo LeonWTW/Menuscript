@@ -21,23 +21,76 @@ final class KeychainStoreTests: XCTestCase {
 
     func testSetGetRoundTrip() throws {
         try setOrSkip("hello-world", forKey: key)
-        XCTAssertEqual(store.get(key), "hello-world")
+        let value = try readOrSkip(key)
+        XCTAssertEqual(value, "hello-world")
     }
 
     func testOverwriteUpdatesValue() throws {
         try setOrSkip("first-value", forKey: key)
         try setOrSkip("second-value", forKey: key)
-        XCTAssertEqual(store.get(key), "second-value")
+        let value = try readOrSkip(key)
+        XCTAssertEqual(value, "second-value")
     }
 
     func testDeleteThenGetIsNil() throws {
         try setOrSkip("to-be-deleted", forKey: key)
         try deleteOrSkip(key)
-        XCTAssertNil(store.get(key))
+        // Evaluate before XCTAssertNil's autoclosure so XCTSkip propagates.
+        let value = try readOrSkip(key)
+        XCTAssertNil(value)
     }
 
     func testDeleteOfMissingKeyDoesNotThrow() throws {
         try deleteOrSkip("missing.key")
+    }
+
+    func testReadOfMissingItemIsNil() throws {
+        // Evaluate before XCTAssertNil's autoclosure so XCTSkip propagates.
+        let value = try readOrSkip("missing.read.key")
+        XCTAssertNil(value)
+    }
+
+    func testReadDecoderReturnsNilOnlyForItemNotFound() throws {
+        XCTAssertNil(try KeychainStore.decodeReadResult(
+            status: errSecItemNotFound,
+            data: nil
+        ))
+
+        XCTAssertThrowsError(try KeychainStore.decodeReadResult(
+            status: errSecInteractionNotAllowed,
+            data: nil
+        )) { error in
+            XCTAssertEqual(
+                error as? KeychainError,
+                .unhandledStatus(errSecInteractionNotAllowed)
+            )
+        }
+    }
+
+    func testReadDecoderRejectsMissingAndInvalidUTF8Data() {
+        XCTAssertThrowsError(try KeychainStore.decodeReadResult(
+            status: errSecSuccess,
+            data: nil
+        )) { error in
+            XCTAssertEqual(error as? KeychainError, .invalidResult)
+        }
+
+        XCTAssertThrowsError(try KeychainStore.decodeReadResult(
+            status: errSecSuccess,
+            data: Data([0xFF, 0xFE])
+        )) { error in
+            XCTAssertEqual(error as? KeychainError, .invalidUTF8)
+        }
+    }
+
+    func testReadDecoderAcceptsUTF8() throws {
+        XCTAssertEqual(
+            try KeychainStore.decodeReadResult(
+                status: errSecSuccess,
+                data: Data("secret".utf8)
+            ),
+            "secret"
+        )
     }
 
     // MARK: - Helpers
@@ -57,6 +110,15 @@ final class KeychainStoreTests: XCTestCase {
         do {
             try store.delete(key)
         } catch KeychainError.unhandledStatus(let status) where status == errSecMissingEntitlement {
+            throw XCTSkip("Keychain unavailable in test host (errSecMissingEntitlement)")
+        }
+    }
+
+    private func readOrSkip(_ key: String) throws -> String? {
+        do {
+            return try store.read(key)
+        } catch KeychainError.unhandledStatus(let status)
+            where status == errSecMissingEntitlement {
             throw XCTSkip("Keychain unavailable in test host (errSecMissingEntitlement)")
         }
     }

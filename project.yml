@@ -24,8 +24,8 @@ targets:
       path: Info.plist
       properties:
         UILaunchScreen: {}
-        NSCameraUsageDescription: "影菜單用嚟辨識翻譯"
-        NSPhotoLibraryUsageDescription: "揀菜單相用嚟辨識翻譯"
+        NSCameraUsageDescription: "用相機拍攝菜單相作辨識翻譯。真實模式會將所拍菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。"
+        NSPhotoLibraryUsageDescription: "選取菜單相作辨識翻譯。真實模式會將所選菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:

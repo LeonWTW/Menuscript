@@ -25,13 +25,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Photograph menus to recognize and translate them"
+            "value" : "Use the camera to photograph menus for recognition and translation. In Live Mode, photographed menu images are sent to Google Gemini; Demo Mode processes them only on this device."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "影菜單用嚟辨識翻譯"
+            "value" : "用相機拍攝菜單相作辨識翻譯。真實模式會將所拍菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。"
           }
         }
       }
@@ -42,13 +42,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pick menu photos to recognize and translate them"
+            "value" : "Select menu photos for recognition and translation. In Live Mode, selected menu images are sent to Google Gemini; Demo Mode processes them only on this device."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "揀菜單相用嚟辨識翻譯"
+            "value" : "選取菜單相作辨識翻譯。真實模式會將所選菜單相傳送至 Google Gemini；示範模式只會喺裝置本機處理。"
           }
         }
       }

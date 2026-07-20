@@ -3,7 +3,7 @@ import Security
 
 /// Thin, synchronous wrapper around Keychain Services for storing small
 /// secrets (e.g. API keys) as generic password items.
-struct KeychainStore: Sendable {
+struct KeychainStore: Sendable, SecretStore {
     /// Key name used to store the user's Gemini API key.
     static let geminiAPIKey = "gemini.apiKey"
 
@@ -48,20 +48,16 @@ struct KeychainStore: Sendable {
         }
     }
 
-    /// Returns the stored string for `key`, or `nil` if it's absent or the
-    /// lookup fails for any reason.
-    func get(_ key: String) -> String? {
+    /// Returns nil only when the item is genuinely absent. Keychain access
+    /// failures and corrupt data remain actionable typed errors.
+    func read(_ key: String) throws -> String? {
         var searchQuery = query(forKey: key)
         searchQuery[kSecReturnData as String] = true
         searchQuery[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: AnyObject?
         let status = SecItemCopyMatching(searchQuery as CFDictionary, &result)
-
-        guard status == errSecSuccess, let data = result as? Data else {
-            return nil
-        }
-        return String(data: data, encoding: .utf8)
+        return try Self.decodeReadResult(status: status, data: result as? Data)
     }
 
     /// Deletes the item stored under `key`. A missing item is not an error.
@@ -79,11 +75,32 @@ struct KeychainStore: Sendable {
             kSecAttrService as String: service
         ]
     }
+
+    /// Pure decoding seam used by tests to cover statuses/data that are hard
+    /// to manufacture through the signed simulator Keychain.
+    static func decodeReadResult(status: OSStatus, data: Data?) throws -> String? {
+        switch status {
+        case errSecItemNotFound:
+            return nil
+        case errSecSuccess:
+            guard let data else {
+                throw KeychainError.invalidResult
+            }
+            guard let value = String(data: data, encoding: .utf8) else {
+                throw KeychainError.invalidUTF8
+            }
+            return value
+        default:
+            throw KeychainError.unhandledStatus(status)
+        }
+    }
 }
 
 /// Wraps a non-success `OSStatus` returned by a Keychain Services call.
 enum KeychainError: Error, LocalizedError, Equatable {
     case unhandledStatus(OSStatus)
+    case invalidResult
+    case invalidUTF8
 
     var errorDescription: String? {
         switch self {
@@ -93,6 +110,10 @@ enum KeychainError: Error, LocalizedError, Equatable {
                 return L10n.string("Keychain 操作失敗（%@）：%@", statusText, message)
             }
             return L10n.string("Keychain 操作失敗（錯誤代碼 %@）", statusText)
+        case .invalidResult:
+            return L10n.string("Keychain 回傳咗無效資料。")
+        case .invalidUTF8:
+            return L10n.string("Keychain 內嘅 API Key 資料已損壞。")
         }
     }
 }

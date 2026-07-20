@@ -9,6 +9,7 @@ struct CartBar: View {
     let totalOriginalText: String
     let totalConvertedText: String?
     var hasUnpriced: Bool = false
+    var isCompleted: Bool = false
     var onCheckout: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -75,7 +76,7 @@ struct CartBar: View {
 
     private var checkoutButton: some View {
         Button(action: onCheckout) {
-            Text("埋單")
+            Text(isCompleted ? LocalizedStringKey("帳單") : LocalizedStringKey("埋單"))
                 .font(.headline)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20)

@@ -10,6 +10,11 @@ import Testing
 /// L10n's bundle lookup breaks for "English system + in-app 繁中".
 @Suite("String catalog completeness")
 struct StringCatalogTests {
+    private struct FormatArgument: Equatable {
+        let position: Int
+        let type: String
+    }
+
     private static let catalogPaths = [
         "Menuscript/Resources/Localizable.xcstrings",
         "Menuscript/Resources/InfoPlist.xcstrings",
@@ -58,6 +63,54 @@ struct StringCatalogTests {
         }
     }
 
+    private func localizedLeafValues(in value: Any) -> [String] {
+        guard let dictionary = value as? [String: Any] else {
+            if let array = value as? [Any] {
+                return array.flatMap { localizedLeafValues(in: $0) }
+            }
+            return []
+        }
+        if let unit = dictionary["stringUnit"] as? [String: Any],
+           let value = unit["value"] as? String {
+            return [value]
+        }
+        return dictionary.values.flatMap { localizedLeafValues(in: $0) }
+    }
+
+    /// Returns the semantic argument position and type for the printf-style
+    /// placeholders supported by this catalog. `%%` is a literal percent.
+    private func formatArguments(in value: String) throws -> [FormatArgument] {
+        let regex = try NSRegularExpression(
+            pattern: #"%(?:%|(?:(\d+)\$)?((?:\.\d+)?(?:ll)?[@df]))"#
+        )
+        let range = NSRange(value.startIndex..., in: value)
+        var nextSequentialPosition = 1
+        var arguments: [FormatArgument] = []
+
+        for match in regex.matches(in: value, range: range) {
+            guard let typeRange = Range(match.range(at: 2), in: value) else {
+                continue
+            }
+            let type = String(value[typeRange])
+            let position: Int
+            if let explicitRange = Range(match.range(at: 1), in: value),
+               let explicit = Int(value[explicitRange]) {
+                position = explicit
+            } else {
+                position = nextSequentialPosition
+                nextSequentialPosition += 1
+            }
+            arguments.append(FormatArgument(position: position, type: type))
+        }
+
+        return arguments.sorted {
+            if $0.position == $1.position {
+                return $0.type < $1.type
+            }
+            return $0.position < $1.position
+        }
+    }
+
     @Test("Every key has translated en and zh-Hant entries", arguments: catalogPaths)
     func everyKeyFullyLocalized(relativePath: String) throws {
         let catalog = try loadCatalog(relativePath)
@@ -78,6 +131,29 @@ struct StringCatalogTests {
                     continue
                 }
                 assertTranslated(localization, key: key, lang: lang)
+            }
+        }
+    }
+
+    @Test("Localized format placeholders preserve argument positions and types", arguments: catalogPaths)
+    func localizedFormatArgumentsMatchSource(relativePath: String) throws {
+        let catalog = try loadCatalog(relativePath)
+        let strings = try #require(catalog["strings"] as? [String: Any], "no strings dict")
+
+        for (key, rawEntry) in strings {
+            let entry = try #require(rawEntry as? [String: Any])
+            let localizations = try #require(entry["localizations"] as? [String: Any])
+            let expected = try formatArguments(in: key)
+
+            for language in ["en", "zh-Hant"] {
+                let localization = try #require(localizations[language] as? [String: Any])
+                for value in localizedLeafValues(in: localization) {
+                    let actual = try formatArguments(in: value)
+                    #expect(
+                        actual == expected,
+                        "\(key) [\(language)] changes its format arguments: \(value)"
+                    )
+                }
             }
         }
     }

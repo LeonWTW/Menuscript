@@ -1,19 +1,93 @@
 import Foundation
 import SwiftUI
 
+struct BillFXProviderSelection: Sendable {
+    let provider: any FXRateProviding
+    let mode: RuntimeMode
+}
+
+private struct MenuItemExplainSelection: Identifiable {
+    let id = UUID()
+    /// Mutable model ownership is limited to explanation cache persistence.
+    let cacheOwner: MenuItem
+    let context: MenuItemActionContext
+}
+
+private struct MenuItemPhotoSelection: Identifiable {
+    let id = UUID()
+    let context: MenuItemActionContext
+}
+
 /// The Menu screen (WF-4): category-filtered dish list with a floating cart
 /// bar. Presentation only — screen data flows exclusively through
 /// `MenuLogic`; explain (`ExplainSheet`) and checkout (`BillView`) are
 /// presented as sheets.
 struct MenuView: View {
     let session: MenuSession
+    var onSessionCompleted: () -> Void = {}
+
+    private let liveFXFactory: RuntimeServiceResolver.LiveFXFactory
+    private let defaults: UserDefaults
 
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var selectedCategory: String?
-    @State private var explainItem: MenuItem?
-    @State private var photoSearchItem: MenuItem?
+    @State private var explainSelection: MenuItemExplainSelection?
+    @State private var photoSearchSelection: MenuItemPhotoSelection?
     @State private var showBill = false
+    @State private var showHistoryPhotos = false
+
+    init(
+        session: MenuSession,
+        defaults: UserDefaults = .standard,
+        onSessionCompleted: @escaping () -> Void = {}
+    ) {
+        self.session = session
+        self.liveFXFactory = { FXService() }
+        self.defaults = defaults
+        self.onSessionCompleted = onSessionCompleted
+    }
+
+    init(
+        session: MenuSession,
+        liveFXProvider: any FXRateProviding,
+        defaults: UserDefaults = .standard,
+        onSessionCompleted: @escaping () -> Void = {}
+    ) {
+        self.session = session
+        self.liveFXFactory = { liveFXProvider }
+        self.defaults = defaults
+        self.onSessionCompleted = onSessionCompleted
+    }
+
+    static func billFXSelection(
+        for session: MenuSession,
+        defaults: UserDefaults = .standard,
+        liveFXFactory: RuntimeServiceResolver.LiveFXFactory
+    ) -> BillFXProviderSelection {
+        let mode = RuntimeServiceResolver.effectiveMode(
+            persistedMode: session.providerMode,
+            defaults: defaults
+        )
+        if mode == .mock {
+            return BillFXProviderSelection(
+                provider: MockFXService(),
+                mode: .mock
+            )
+        }
+        return BillFXProviderSelection(
+            provider: liveFXFactory(),
+            mode: .live
+        )
+    }
+
+    private var billFXSelection: BillFXProviderSelection {
+        Self.billFXSelection(
+            for: session,
+            defaults: defaults,
+            liveFXFactory: liveFXFactory
+        )
+    }
 
     private var categories: [String] {
         MenuLogic.categories(items: session.items)
@@ -23,29 +97,72 @@ struct MenuView: View {
         MenuLogic.filtered(items: session.items, category: selectedCategory)
     }
 
-    private var cartTotals: (kinds: Int, count: Int, subtotal: Decimal, hasUnpriced: Bool) {
-        MenuLogic.totals(items: session.items)
-    }
-
-    private var isCartVisible: Bool {
-        cartTotals.count > 0
-    }
-
-    private var originalSubtotalText: String {
-        CurrencyFormat.format(cartTotals.subtotal, code: session.menuCurrency)
-    }
-
-    private var convertedSubtotalText: String? {
-        guard let fxRate = session.effectiveFXRate else { return nil }
-        let converted = BillMath.converted(cartTotals.subtotal, rate: fxRate)
-        return "≈ " + CurrencyFormat.format(converted, code: session.homeCurrency)
-    }
 
     private var hairlineColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.08)
     }
 
     var body: some View {
+        sessionContent
+            .background { Color.mtBackground.ignoresSafeArea() }
+            .navigationTitle(session.title ?? L10n.string("菜單"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if session.hasPhotos {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showHistoryPhotos = true
+                        } label: {
+                            Label("菜單相片", systemImage: "photo.stack")
+                        }
+                    }
+                }
+            }
+            .toolbarBackground(Color.mtBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(item: $explainSelection) { selection in
+                explainSheet(for: selection)
+            }
+            .sheet(item: $photoSearchSelection) { selection in
+                photoSearchSheet(for: selection.context)
+            }
+            .sheet(isPresented: $showBill) {
+                NavigationStack {
+                    BillView(
+                        session: session,
+                        fxProvider: billFXSelection.provider,
+                        onCompleted: onSessionCompleted
+                    )
+                        .navigationTitle("帳單")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+                .presentationDetents([.large])
+            }
+            .sheet(isPresented: $showHistoryPhotos) {
+                HistoryPhotoGalleryView(photos: session.photos)
+            }
+            #if DEBUG
+            .task {
+                applyAutoDemoScreenIfNeeded()
+            }
+            #endif
+    }
+
+    @ViewBuilder
+    private var sessionContent: some View {
+        switch MenuPresentationState.resolve(for: session) {
+        case .content(let presentation):
+            menuContent(presentation)
+        case .unavailable(let reason):
+            ContentUnavailableView(
+                "帳單未能安全顯示",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text(reason.localizedMessage)
+            )
+        }
+    }
+
+    private func menuContent(_ presentation: MenuOrderPresentation) -> some View {
         ScrollView {
             if filteredItems.isEmpty {
                 emptyCategoryState
@@ -53,13 +170,31 @@ struct MenuView: View {
                 VStack(spacing: MTSpacing.cardGap) {
                     LazyVStack(spacing: MTSpacing.cardGap) {
                         ForEach(filteredItems, id: \.persistentModelID) { item in
+                            let cardPresentation = presentation.snapshot.map {
+                                MenuItemCardPresentation.completed(item, snapshot: $0)
+                            } ?? MenuItemCardPresentation.live(item)
+                            let actionContext = MenuItemActionContext.make(
+                                cardPresentation: cardPresentation,
+                                lowConfidence: item.lowConfidence,
+                                session: session,
+                                snapshot: presentation.snapshot
+                            )
                             MenuItemCard(
                                 item: item,
-                                menuCurrency: session.menuCurrency,
-                                homeCurrency: session.homeCurrency,
-                                fxRate: session.effectiveFXRate,
-                                onExplain: { explainItem = $0 },
-                                onPhotoSearch: { photoSearchItem = $0 }
+                                menuCurrency: presentation.menuCurrency,
+                                homeCurrency: presentation.homeCurrency,
+                                fxRate: presentation.fxRate,
+                                presentation: cardPresentation,
+                                actionContext: actionContext,
+                                onExplain: {
+                                    explainSelection = MenuItemExplainSelection(
+                                        cacheOwner: item,
+                                        context: $0
+                                    )
+                                },
+                                onPhotoSearch: {
+                                    photoSearchSelection = MenuItemPhotoSelection(context: $0)
+                                }
                             )
                         }
                     }
@@ -70,11 +205,6 @@ struct MenuView: View {
                 .padding(.horizontal, MTSpacing.screenMargin)
             }
         }
-        .background { Color.mtBackground.ignoresSafeArea() }
-        .navigationTitle(session.title ?? L10n.string("菜單"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.mtBackground, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
             CategoryChipsBar(categories: categories, selection: $selectedCategory)
                 .background(Color.mtBackground)
@@ -86,43 +216,25 @@ struct MenuView: View {
                 }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isCartVisible {
+            if presentation.cartTotals.count > 0 {
                 CartBar(
-                    kindCount: cartTotals.kinds,
-                    totalQuantity: cartTotals.count,
-                    totalOriginalText: originalSubtotalText,
-                    totalConvertedText: convertedSubtotalText,
-                    hasUnpriced: cartTotals.hasUnpriced,
+                    kindCount: presentation.cartTotals.kinds,
+                    totalQuantity: presentation.cartTotals.count,
+                    totalOriginalText: CurrencyFormat.format(
+                        presentation.cartTotals.subtotal,
+                        code: presentation.menuCurrency
+                    ),
+                    totalConvertedText: presentation.convertedSubtotal.map {
+                        "≈ " + CurrencyFormat.format($0, code: presentation.homeCurrency)
+                    },
+                    hasUnpriced: presentation.cartTotals.hasUnpriced,
+                    isCompleted: presentation.isReadOnly,
                     onCheckout: { showBill = true }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.default, value: isCartVisible)
-        .sheet(item: $explainItem) { item in
-            explainSheet(for: item)
-        }
-        .sheet(item: $photoSearchItem) { item in
-            photoSearchSheet(for: item)
-        }
-        .sheet(isPresented: $showBill) {
-            NavigationStack {
-                BillView(session: session)
-                    .navigationTitle("帳單")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("完成") { showBill = false }
-                        }
-                    }
-            }
-            .presentationDetents([.large])
-        }
-        #if DEBUG
-        .task {
-            applyAutoDemoScreenIfNeeded()
-        }
-        #endif
+        .animation(.default, value: presentation.cartTotals.count > 0)
     }
 
     private var emptyCategoryState: some View {
@@ -140,15 +252,17 @@ struct MenuView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func explainSheet(for item: MenuItem) -> some View {
-        ExplainSheet(item: item)
+    private func explainSheet(for selection: MenuItemExplainSelection) -> some View {
+        ExplainSheet(
+            item: selection.cacheOwner,
+            actionContext: selection.context,
+            onDeleteAllSucceeded: onSessionCompleted
+        )
     }
 
     @ViewBuilder
-    private func photoSearchSheet(for item: MenuItem) -> some View {
-        let trimmed = item.originalName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = trimmed.isEmpty ? item.translatedName : trimmed
-        if let url = PhotoSearch.imagesURL(query: query) {
+    private func photoSearchSheet(for context: MenuItemActionContext) -> some View {
+        if let url = PhotoSearch.imagesURL(query: context.photoSearchQuery) {
             SafariView(url: url)
                 .ignoresSafeArea()
         } else {
@@ -173,7 +287,22 @@ struct MenuView: View {
         case "bill":
             showBill = true
         case "explain":
-            explainItem = MenuLogic.filtered(items: session.items, category: nil).first
+            guard case .content(let presentation) = MenuPresentationState.resolve(for: session),
+                  let item = MenuLogic.filtered(items: session.items, category: nil).first else {
+                return
+            }
+            let cardPresentation = presentation.snapshot.map {
+                MenuItemCardPresentation.completed(item, snapshot: $0)
+            } ?? MenuItemCardPresentation.live(item)
+            explainSelection = MenuItemExplainSelection(
+                cacheOwner: item,
+                context: MenuItemActionContext.make(
+                    cardPresentation: cardPresentation,
+                    lowConfidence: item.lowConfidence,
+                    session: session,
+                    snapshot: presentation.snapshot
+                )
+            )
         default:
             break
         }
