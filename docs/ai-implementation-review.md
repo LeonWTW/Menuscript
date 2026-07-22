@@ -92,3 +92,48 @@ Two accepted design flags were also acted on: the photo button dropped from the 
 ### Manual Verification After AI Review
 
 Automated tests for both features are written and green (the run cited above). The hands-on simulator pass — settings persistence, mock-scan summaries, the 唐揚げ warning icon and its alert, in-app photo search, the all-allergens-off case, and old-session migration — is **pending**. It is planned and recorded as the to-be-completed test-case table in `docs/manual-verification.md` (§ 2026-07-12), where every observed result currently reads `pending — 待人手實測`. Real-API (live Gemini) end-to-end testing of the allergen/summary output is likewise still pending, consistent with the rest of this prototype.
+
+## 2026-07-19 — Sprint 3: Session Lifecycle, Immutable Bill Snapshots, and Privacy Hardening
+
+Sprint 3's expansion direction is persistence: a draft/completed session lifecycle, immutable completed-bill snapshots, a history photo gallery, and the hardening that direction forced into the open — runtime service resolution, the capture pipeline, secure key storage, and the privacy boundary around live Gemini calls.
+
+### AI Implementation Assistance
+
+I led Sprint 3 from design through implementation: I chose the expansion direction, scoped each wave, implemented and integrated the changes, and reviewed the resulting behavior before accepting each step. Claude Code was used as a supporting tool for design discussion, implementation suggestions, debugging, test ideas, and code review. The work landed as five single-purpose commits on `sprint-3-expansion`:
+
+- `8a19089` — replaced `ProviderFactory` with `RuntimeServiceResolver`, which resolves the vision and FX providers as a matched pair (live Gemini + live Frankfurter, or mock vision + mock FX — never a mix), introduced typed service errors, and moved the Gemini API key into the Keychain behind a `SecretStore` protocol.
+- `d0cea55` — capture pipeline hardening: stable photo ordering, explicit photo limits (`CaptureLimits`), atomic saves, and cancellation via `PhotoImportCoordinator`.
+- `bf75463` — the core persistence work: `MenuSession` lifecycle state, versioned `BillSnapshot` (v1), the throwing `SessionStore` boundary, and `HistoryPhotoGalleryView`.
+- `4e85031` — `PrivacyInfo.xcprivacy`, the one-time `GeminiDisclosureGate` before the first live Gemini request, camera/photo-library permission copy that distinguishes live Google transfer from on-device mock processing, and a large localization pass.
+- `cecf8b3` — documentation: architecture evolution, README expected behavior, and the Sprint 3 manual-verification plan.
+
+### Engineering Review Highlights
+
+The review focus this sprint was failure behavior at the new persistence boundary — what the app claims versus what actually got saved:
+
+1. **`SessionStore.finalize` is idempotent and restores on failure.** A second finalize returns the exact persisted snapshot without writing; if the save throws, the previous lifecycle status and snapshot bytes are restored, so the UI can never show "completed" for a state that was not persisted.
+2. **History deletion runs in an isolated, short-lived `ModelContext`** with autosave off and a count check before deleting. If anything fails, that context is discarded and the UI's context was never mutated — avoiding SwiftData's unsafe cascade-delete rollback path for faulted children.
+3. **Legacy sessions can never masquerade as completed.** `lifecycleStatusRaw` and `billSnapshotData` are optional additive fields (lightweight migration, no schema bump); a missing or unknown status maps to `legacyUnfinalized`, never `completed`.
+4. **FX quote dates are timezone-proof.** `FXRate` keeps the market `quoteDate` as a canonical date-only string separate from `fetchedAt`, so a device timezone change can't shift a market quote to the previous/next day; cached quotes expire after seven days.
+
+### Accepted Suggestions
+
+- **The isolated-deletion-context design.** The straightforward implementation — delete in the UI context and roll back on failure — was flagged as unsafe for faulted cascade relationships in SwiftData. I accepted the more involved separate-context approach; it is pinned by `SessionStoreTests` and `HistoryDeleteTests`.
+- **Scoped restore in `updateFXRate`.** On a failed rate save, only the five quote fields it touched are restored, so other pending edits in the shared UI context survive instead of being clobbered by a blanket rollback.
+
+### Rejected or Postponed Suggestions
+
+- **Executing the manual verification pass now — postponed.** The nine hands-on test cases for lifecycle, disclosure, offline mock, gallery, TWD/cache-expiry, and privacy-manifest inspection are written down with expected results in `docs/manual-verification.md` (§ 2026-07-15), but every observed result still reads pending. I chose to land the implementation and its automated coverage first and run the manual pass as deliverable preparation, rather than half-running it now.
+- **A backend proxy for API keys — postponed.** Removing the bring-your-own-key requirement means a server, operating cost, and a different privacy story. It is recorded as an open question in `docs/architecture.md`, not smuggled into Sprint 3 scope.
+
+### Sprint 2 Review Carry-overs
+
+Of the two findings I postponed in Sprint 2: **(4) FX rate provenance is now delivered** — `MenuSession.fxSource` (live/cached/manual/mock) is persisted, frozen into the completed-bill snapshot, and shown in the bill UI, so a completed bill permanently shows which kind of rate produced its totals. **(3) Dynamic Type at AX3+ remains open honestly**: the layout code has had `isAccessibilitySize` branches since the original prototype, but the finding was about *verification* at those sizes, and that verification is still pending — I am not marking it closed on the strength of code that hasn't been exercised.
+
+### An Engineering Decision That Was Mine
+
+The freeze-versus-recompute call. A completed bill could recompute its totals from live session fields every time it is opened — simpler, no snapshot machinery — but then a later FX refresh or settings change would silently rewrite a bill the user already settled. I decided completed bills should read only from the snapshot captured at finalization and never recompute, accepting the cost of a versioned snapshot codec and duplicate-looking fields. I implemented this design with AI assistance available for discussion, debugging, and review, but the product judgment that a settled bill must never change afterward — and the choice to spend Sprint 3 on persistence depth rather than new feature surface — were my decisions.
+
+### Manual Verification After AI Review
+
+Automated evidence, re-run while preparing this document (2026-07-19): regenerated the project with `xcodegen generate`, then ran the full suite on iPhone 17 / iOS 26.3.1 — **211 tests passed, 0 failed, 0 skipped** (228 test runs counting parameterized cases), result `Passed`, `xcodebuild` exit 0. The first attempt actually failed to build because my local generated `.xcodeproj` was stale and still referenced the deleted `ProviderFactoryTests.swift` — regenerating per the instructions in `AGENTS.md` fixed it, which is a small real-world confirmation that the documented clean-clone steps matter. The nine-case manual pass and real-API (live Gemini) end-to-end testing remain pending, as recorded above.

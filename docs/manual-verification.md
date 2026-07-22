@@ -130,4 +130,45 @@ This section defines the next hands-on pass for the hardened lifecycle, provider
 | 6 | Reopen a completed bill and attempt to change line quantity, surcharge, people, or refresh FX. No mutation control is available and displayed values match the completion snapshot. | pending — 待人手實測 |
 | 7 | Open History photo galleries with one and six pages; verify order, counter, VoiceOver labels, pinch/double-tap zoom, and bounded memory while paging. A session with zero photos has no gallery button. | pending — 待人手實測 |
 | 8 | Exercise a TWD pair live, then disable network before and after the seven-day cache boundary. The fresh cached quote is accepted; the expired quote is not. Quote date stays unchanged across LA/Honolulu timezone changes. | pending — 待人手實測 |
-| 9 | Inspect the archived app root for `PrivacyInfo.xcprivacy` and validate its collected-data and required-reason entries against the privacy labels prepared for distribution. | pending — 待人手實測 |
+| 9 | Inspect the archived app root for `PrivacyInfo.xcprivacy` and validate its collected-data and required-reason entries against the privacy labels prepared for distribution. | **PASS — 2026-07-22.** Archived via `xcodebuild archive` (generic/platform=iOS, `CODE_SIGNING_ALLOWED=NO`, ARCHIVE SUCCEEDED); `PrivacyInfo.xcprivacy` present at the app root and dumped with `plutil -p`. Contents match the declared contract exactly: `NSPrivacyTracking` false with no tracking-domains entry; collected data types are Photos/Videos, Other User Content, and Health — each linked, purpose App Functionality, tracking false; accessed-API types declare only UserDefaults with reason `CA92.1`. |
+
+## 2026-07-22 — Live Gemini Spot-Check on a Real Handwritten Japanese Menu (informal)
+
+An informal, single-menu accuracy spot-check of the live recognition path, run ahead of the formal nine-case pass above (which stays pending). It exists to answer one question early: does recognition/translation hold up on a real, difficult, handwritten menu? That was recorded at the Sprint 2 checkpoint as the project's biggest unknown, so it was worth testing as soon as a live key was available rather than waiting for the full pass.
+
+### Scope & Environment
+
+- **Date:** 2026-07-22
+- **Simulator:** iPhone 17
+- **Mode:** Demo Mode **off**, live Gemini via the user's own API key; live FX conversion shown per line (JPY → USD, consistent ≈0.00615 rate across all sampled lines)
+- **Input:** one photo of a real izakaya menu, fully handwritten in Japanese brush calligraphy — deliberately chosen as a hard case: ~36–37 items across a sashimi list, appetizers, grilled dishes, an oden box, and two whisky highballs, with handwritten prices, prefecture-origin margin notes, orange highlighter strokes, and one item crossed out in red as sold out.
+- **Method:** the same photo was also run through the Google Lens / Google Translate camera translation as a baseline, and results were compared dish-by-dish against a human reading of the original menu.
+- **Process note:** a first attempt at this check was invalid — Demo Mode was still on, so the app returned its built-in 鷹の目 sample menu instead of a live result. The mismatch was caught by comparing the result's dishes and prices against the input photo before recording anything. Lesson kept here on purpose: live-path evidence must always be sanity-checked against its input.
+
+### Observed Results — Menuscript (live Gemini)
+
+- **Extraction coverage:** History records the session as **36 dishes · 日文, Completed** — essentially the full menu (the handwritten original has ~36–37 items, one of them struck through as sold out).
+- **Dish-level sample** (all ten dishes visible across the captured screenshots, checked against the original):
+
+| # | Handwritten item | App result (name / original / price) | Verdict |
+|---|------------------|--------------------------------------|---------|
+| 1 | カンパチ腹身刺し ¥1,280 | Amberjack Belly Sashimi · カンパチ腹刺 · ¥1280 | correct |
+| 2 | ヒラメ刺し ¥1,380 | Flounder Sashimi · ヒラメ刺 · ¥1380 | correct |
+| 3 | ヒラスズキ刺し ¥1,380 | Blackfin Seabass Sashimi · ヒラスズキ刺 · ¥1380 | correct — exact species (blackfin seabass), not a generic "sea bass" |
+| 4 | ヒラメの肝和え ¥1,080 | Flounder Liver Aemono · ¥1080 | correct |
+| 5 | 海鮮納豆 ¥880 | Seafood Natto · ¥880 | correct |
+| 6 | 梅水晶 ¥580 | Ume Suisho · ¥580 · "Pickled plum with shark cartilage." | correct, including domain knowledge — the dish name alone does not say shark cartilage |
+| 7 | 漬物盛り合わせ ¥580 | Assorted Pickles · ¥580 | correct |
+| 8 | 骨付カルビの網焼 ¥1,280 | Grilled Bone-in Kalbi · ¥1280 | correct, "bone-in" preserved |
+| 9 | 地鶏の塩焼 ¥880 | Local Chicken Salt Grill · ¥880 | correct |
+| 10 | 胡麻カンパチ(?) ¥980 | Seasonal Fresh Amberjack · 旬鮮カンパチ · ¥980 | **one probable misread:** the brush-written modifier looks like 胡麻 (sesame — Google Lens read it the same way); Gemini transcribed 旬鮮 (seasonal fresh). Fish species and price are still correct. |
+
+- **Sample tally: 9/10 fully correct, 1/10 with a probable modifier misread; prices 10/10 correct.** No fabricated dishes were observed in the sample, categories (Sashimi / Grilled Fish / Vegetables / Appetizer / Simmered Dish …) were assigned sensibly, and none of the sampled cards carried the low-confidence badge. Allergen advisory badges appeared on plausible dishes for the configured sensitivities (e.g. Seafood Natto, Assorted Pickles, Grilled Bone-in Kalbi), with the standing advisory-only footnote shown under the list.
+
+### Baseline — Google Lens on the same photo
+
+Roughly half of the Lens output on this menu was unusable, including outright fabrication. Representative failures against the same handwriting: 鰆の煮付け → "Boiled victory"; ワカサギの天ぷら → "Smelt heaven!"; 雲仙ハムカツ → "cloud muhamgan"; 白州ハイボール → "6 state highball"; タコぶつ → "Octopus hit"; an entire invented sentence ("Eightre-chan, here's a delicious shrimp treat.") where the menu lists a fried dish; and prices merged into dish text ("Dried 1803190 Hanpen"). Where both systems read the same dish, Gemini was consistently stronger: 梅水晶 came back as the literal "plum crystal" from Lens versus a correct shark-cartilage explanation from Menuscript, and ヒラスズキ as generic "Japanese sea bass" versus the exact species. Lens also has no notion of structure — no per-dish prices, categories, or summaries — which is the gap the app's structured extraction is designed to fill.
+
+### Engineering Conclusion
+
+On the strength of this spot-check, the Sprint 2 checkpoint's "biggest unknown" — whether recognition/translation would survive real, messy, handwritten menus — is retired as the project's top risk: structured extraction on a genuinely hard handwritten menu was essentially complete (36 items), the ten-dish sample contained no wrong dish or wrong price, and the one defect found was a modifier-level transcription slip. One menu is a spot-check, not a statistical claim, so formal accuracy evaluation stays future work; the project's top open risk now shifts to verifying the Sprint 3 persistence behavior — the nine-case manual pass above and a physical-device end-to-end run.
