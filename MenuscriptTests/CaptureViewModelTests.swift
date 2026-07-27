@@ -271,7 +271,7 @@ struct CaptureViewModelTests {
         #expect(sessionCountsAtSave == [1])
         #expect(itemCountsAtSave == [1])
         #expect(viewModel.completedSession == nil)
-        #expect(viewModel.errorMessage == L10n.string("未能儲存菜單，請再試一次。"))
+        #expect(viewModel.errorMessage == L10n.string("未能儲存菜單，請再試一次。", defaults: defaults))
         #expect(viewModel.recoveryAction == .retry)
         #expect(viewModel.photos.count == 1)
         #expect(viewModel.photos.first?.id == stagedPhotoID)

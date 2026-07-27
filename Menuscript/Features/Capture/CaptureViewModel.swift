@@ -352,7 +352,7 @@ final class CaptureViewModel: Identifiable {
             } catch {
                 discardInsertedGraph(session: session, items: items)
                 completedSession = nil
-                errorMessage = L10n.string("未能儲存菜單，請再試一次。")
+                errorMessage = L10n.string("未能儲存菜單，請再試一次。", defaults: defaults)
                 recoveryAction = .retry
                 return
             }
@@ -367,7 +367,7 @@ final class CaptureViewModel: Identifiable {
             if let providerError = error as? VisionProviderError {
                 handleProviderError(providerError)
             } else {
-                errorMessage = L10n.string("辨識暫時失敗，請再試一次。")
+                errorMessage = L10n.string("辨識暫時失敗，請再試一次。", defaults: defaults)
                 recoveryAction = .retry
             }
         }
@@ -439,7 +439,7 @@ final class CaptureViewModel: Identifiable {
         if let keychainError = error as? KeychainError {
             errorMessage = keychainError.errorDescription
         } else {
-            errorMessage = L10n.string("安全儲存空間暫時無法使用，請稍後再試。")
+            errorMessage = L10n.string("安全儲存空間暫時無法使用，請稍後再試。", defaults: defaults)
         }
         recoveryAction = .retry
         needsAPIKey = false
