@@ -262,6 +262,7 @@ struct RuntimeWiringTests {
 
         let (liveDefaults, liveSuite) = try makeDefaults(useMock: false)
         defer { liveDefaults.removePersistentDomain(forName: liveSuite) }
+        liveDefaults.set(AppLanguage.zhHant.rawValue, forKey: SettingsKeys.appLanguage)
         let unavailableStore = WiringSecretStore(shouldFailRead: true)
         let unavailableViewModel = CaptureViewModel(
             modelContext: try makeContext(),

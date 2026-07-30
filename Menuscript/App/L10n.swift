@@ -8,8 +8,8 @@ enum L10n {
     /// source 語言（zh-Hant）唔會編出 lproj，而 Bundle.main 會跟系統語言
     /// 揀咗 en，令「英文系統 + app 內揀繁中」錯誤顯示英文。
     /// key 本身就係 zh-Hant 原文，所以直接回傳 key 先係正確 fallback。
-    private static func lookup(_ key: String) -> String {
-        let lang = AppLanguage.resolve()
+    private static func lookup(_ key: String, defaults: UserDefaults) -> String {
+        let lang = AppLanguage.resolve(from: defaults)
         guard let identifier = lang.locale?.identifier else {
             return Bundle.main.localizedString(forKey: key, value: nil, table: nil)
         }
@@ -20,11 +20,11 @@ enum L10n {
         return bundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
-    static func string(_ key: String) -> String {
-        lookup(key)
+    static func string(_ key: String, defaults: UserDefaults = .standard) -> String {
+        lookup(key, defaults: defaults)
     }
 
-    static func string(_ key: String, _ args: CVarArg...) -> String {
-        String(format: lookup(key), arguments: args)
+    static func string(_ key: String, _ args: CVarArg..., defaults: UserDefaults = .standard) -> String {
+        String(format: lookup(key, defaults: defaults), arguments: args)
     }
 }
