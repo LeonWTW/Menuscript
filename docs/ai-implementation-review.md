@@ -99,7 +99,7 @@ Sprint 3's expansion direction is persistence: a draft/completed session lifecyc
 
 ### AI Implementation Assistance
 
-I led Sprint 3 from design through implementation: I chose the expansion direction, scoped each wave, implemented and integrated the changes, and reviewed the resulting behavior before accepting each step. Claude Code was used as a supporting tool for design discussion, implementation suggestions, debugging, test ideas, and code review. The work landed as five single-purpose commits on `sprint-3-expansion`:
+I led Sprint 3 from design through implementation: I chose the expansion direction, scoped each wave, implemented and integrated the changes, and reviewed the resulting behavior before accepting each step. Claude Code was used as a supporting tool for design discussion, implementation suggestions, debugging, test ideas, and code review. The implementation work landed as five single-purpose commits on `sprint-3-expansion` (three further commits followed later, during deliverable preparation — see § 2026-07-26 below):
 
 - `8a19089` — replaced `ProviderFactory` with `RuntimeServiceResolver`, which resolves the vision and FX providers as a matched pair (live Gemini + live Frankfurter, or mock vision + mock FX — never a mix), introduced typed service errors, and moved the Gemini API key into the Keychain behind a `SecretStore` protocol.
 - `d0cea55` — capture pipeline hardening: stable photo ordering, explicit photo limits (`CaptureLimits`), atomic saves, and cancellation via `PhotoImportCoordinator`.
@@ -123,7 +123,7 @@ The review focus this sprint was failure behavior at the new persistence boundar
 
 ### Rejected or Postponed Suggestions
 
-- **Executing the manual verification pass now — postponed.** The nine hands-on test cases for lifecycle, disclosure, offline mock, gallery, TWD/cache-expiry, and privacy-manifest inspection are written down with expected results in `docs/manual-verification.md` (§ 2026-07-15), but every observed result still reads pending. I chose to land the implementation and its automated coverage first and run the manual pass as deliverable preparation, rather than half-running it now.
+- **Executing the manual verification pass now — postponed.** The nine hands-on test cases for lifecycle, disclosure, offline mock, gallery, TWD/cache-expiry, and privacy-manifest inspection are written down with expected results in `docs/manual-verification.md` (§ 2026-07-15), but every observed result still reads pending. I chose to land the implementation and its automated coverage first and run the manual pass as deliverable preparation, rather than half-running it now. *(Resolved later: case 9 on 2026-07-22 and cases 3–8 on 2026-07-26 — see § 2026-07-26 below. Cases 1–2 remain outstanding.)*
 - **A backend proxy for API keys — postponed.** Removing the bring-your-own-key requirement means a server, operating cost, and a different privacy story. It is recorded as an open question in `docs/architecture.md`, not smuggled into Sprint 3 scope.
 
 ### Sprint 2 Review Carry-overs
@@ -136,4 +136,42 @@ The freeze-versus-recompute call. A completed bill could recompute its totals fr
 
 ### Manual Verification After AI Review
 
-Automated evidence, re-run while preparing this document (2026-07-19): regenerated the project with `xcodegen generate`, then ran the full suite on iPhone 17 / iOS 26.3.1 — **211 tests passed, 0 failed, 0 skipped** (228 test runs counting parameterized cases), result `Passed`, `xcodebuild` exit 0. The first attempt actually failed to build because my local generated `.xcodeproj` was stale and still referenced the deleted `ProviderFactoryTests.swift` — regenerating per the instructions in `AGENTS.md` fixed it, which is a small real-world confirmation that the documented clean-clone steps matter. The nine-case manual pass and real-API (live Gemini) end-to-end testing remain pending, as recorded above.
+Automated evidence, re-run while preparing this document (2026-07-19): regenerated the project with `xcodegen generate`, then ran the full suite on iPhone 17 / iOS 26.3.1 — **211 tests passed, 0 failed, 0 skipped** (228 test runs counting parameterized cases), result `Passed`, `xcodebuild` exit 0. The first attempt actually failed to build because my local generated `.xcodeproj` was stale and still referenced the deleted `ProviderFactoryTests.swift` — regenerating per the instructions in `AGENTS.md` fixed it, which is a small real-world confirmation that the documented clean-clone steps matter. The nine-case manual pass and real-API (live Gemini) end-to-end testing both remained pending at this point; § 2026-07-26 below records what has since been executed and what is still outstanding.
+
+## 2026-07-26 — Deliverable Preparation: Executing the Sprint 3 Verification Plan
+
+The postponement recorded above came due. This section covers executing the nine-case plan, the defect that execution turned up in production code, and where I chose to stop.
+
+### AI Implementation Assistance
+
+Sprint 3's verification became possible in a way it had not been in Sprint 2. The Sprint 2 pass recorded that simulator tap automation could not be done — `osascript` returned `-1719 not allowed assistive access` and `cliclick` reported that Accessibility privileges were not enabled — which is why several Sprint 2 cases fell back to code inspection. That permission is now granted on my machine, so this pass could actually drive the UI: `cliclick` taps and `xcrun simctl io screenshot` after every tap, with the resulting screenshot checked before the next tap was issued.
+
+I directed a Claude Code agent to execute cases 3–8 against a scoped brief: which simulator to use, what counted as observed versus inferred, that no source file or git state was to be touched, and that it must never handle the Gemini API key. Case 9 (privacy-manifest inspection and a live Gemini spot-check) had already been done on 2026-07-22 and landed as `799a65d`. The pass produced 56 screenshots and a full expected/observed/verdict report, written up in `docs/manual-verification.md` (§ 2026-07-26). Two commits followed: `0ee1830` (the Sprint 3 section above) and `41df014` (the fix described next), bringing `sprint-3-expansion` to eight commits.
+
+The automation channel is disclosed in the verification doc rather than glossed as a hand-driven pass, along with each of the three places where state had to be seeded to reach a case (an expired FX cache cannot be produced by waiting seven days) and a seven-row list of what was *not* observed.
+
+### AI-Assisted Engineering Review
+
+Executing the plan reviewed the plan, and it reviewed the app. Three findings mattered:
+
+1. **A real production defect the green suite was hiding.** `L10n.string` resolved the app-language preference from `UserDefaults.standard` unconditionally. `CaptureViewModel` is written to take an injected `UserDefaults`, so its three localized error messages silently bypassed the injection and read the host's real preferences instead. The tests asserting on those strings were therefore coupled to whatever `settings.appLanguage` a previous run had left behind on the machine — they could pass or fail for reasons having nothing to do with the code under test. This is exactly the class of bug an all-green suite cannot report, and it surfaced only because a fresh environment produced a different result than my own machine did.
+2. **A defect in the test plan, not the app.** Case 3 expected the photo-library permission prompt to appear on first import. It cannot: the app uses SwiftUI's `PhotosPicker` (`CaptureView.swift`), which runs out of process and requires no library authorization, so `NSPhotoLibraryUsageDescription` is unreachable at runtime. I corrected the case rather than filing an app bug — and kept the `Info.plist` string, since App Store review expects the declaration regardless.
+3. **The irreplaceable-evidence hazard.** The live-Gemini evidence from 2026-07-22 exists only inside one simulator's app container: one real handwritten menu, one live run, not reproducible from the repository. A verification pass that erases and reinstalls simulators to get clean state is a direct threat to it. Before any of it ran, the pass was pinned to a device that held nothing irreplaceable and the store was backed up outside the session scratch directory. My own device attribution in the § 2026-07-22 write-up turned out to be wrong on re-checking the store, which is precisely why the backup came first rather than after.
+
+### One Accepted Suggestion
+
+**Fix the seam, not the test.** The obvious way to make the two failing tests deterministic was to have them write `settings.appLanguage` into `UserDefaults.standard` before asserting. I accepted the alternative: give `L10n.lookup`/`string` a `defaults: UserDefaults = .standard` parameter and have `CaptureViewModel` forward its own injected instance. The default parameter leaves every production call site unchanged, and the dependency injection the view model already advertised now actually holds for localization. Making the test conform to the leak would have left a real bug in place — any future caller that injects `UserDefaults` for localization would have been silently ignored.
+
+### One Postponed Suggestion
+
+**Turning the automation harness into a committed XCUITest target — postponed.** It is the obvious next step for repeatability, and `project.yml` has no UI-test target today. I postponed it because the things that carried this pass are things XCUITest cannot see: the contents of the SwiftData store, the *absence* of network traffic in demo mode, the bytes of `PrivacyInfo.xcprivacy`, and an FX cache aged past its seven-day limit. Rebuilding this as an in-process UI test late in the sprint would trade a completed, honestly-disclosed pass for a partial automated one that verifies less. It is recorded here as Sprint 4 work.
+
+### An Engineering Decision That Was Mine
+
+**Submitting a table with two visible gaps instead of a full green one.** Cases 1 and 2 — the first-run live-Gemini disclosure and a complete live recognition behind it — need a real API key on a clean install, and case 8's literal network-off half needs the Wi-Fi actually switched off. Cases 3–8 came back as two PASS and four PARTIAL. I could have written PASS across the board on the strength of "the code path was exercised", or quietly dropped the cases that were not run. I chose instead to record PARTIAL where only part of a case was observed, leave 1 and 2 reading `pending`, and add an explicit "not run / not observed" list naming each gap and why. A verification document whose value depends on the reader trusting it is worth nothing if it rounds up; the two pending rows are more informative about the state of this project than a clean table would have been.
+
+### Manual Verification After AI Review
+
+I did not accept the executing agent's report as evidence. A separate pass re-derived the checkable claims independently: the reported Frankfurter JPY/TWD rate was re-requested and matched exactly; the screenshots for the read-only completed bill (no steppers, no surcharge control, no rate refresh) and for the rejected expired cache were re-read rather than taken on trust; the screenshot count and a clean `git status` were confirmed. One reported detail did **not** reproduce — an invalid-currency request that the agent recorded as HTTP 422 returned a transient 522 on re-check — and it is recorded as unconfirmed in the verification doc instead of being tidied away.
+
+Automated evidence after the `L10n` fix: `xcodebuild test` on iPhone 17 / iOS 26.3.1 — **211 tests passed, 0 failed, 0 skipped**, exit 0 (`41df014`). Still outstanding and stated as such: cases 1–2, physical-device verification, and Dynamic Type at AX3+.

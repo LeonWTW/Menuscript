@@ -10,7 +10,7 @@ A core design principle: recognition quality on hard, handwritten menus is the p
 
 ## Current Status
 
-Prototype/spike stage — the core flow is implemented and working (milestones M1–M6 plus a bilingual-UI pass; see git history):
+Prototype/spike stage — the core flow is implemented and working (milestones M1–M6, a bilingual-UI pass, and the Sprint 3 persistence expansion; see git history):
 
 - **Capture** — multi-photo menu capture from the camera or photo library, feeding directly into the recognition pipeline.
 - **Menu** — categorized, translated dish cards with a one-line AI summary per dish, advisory allergen warning icons, quantity controls, and one-tap Google Images photo search in an in-app browser; an on-demand AI "explain this dish" sheet, cached per dish; builds the cart.
@@ -21,6 +21,27 @@ Prototype/spike stage — the core flow is implemented and working (milestones M
 The automated suite covers provider requests, capture limits, offline mock behavior, FX fallback, persistence, immutable bill snapshots, localization, and privacy-manifest structure. See Quickstart below to run it locally.
 
 See [Intentionally Deferred Features](#intentionally-deferred-features) below for what's explicitly out of scope for this prototype.
+
+## Sprint 3 Expansion — Persistence
+
+Sprint 3's expansion direction is **persistence**: a session that survives being abandoned, and a bill that can never silently change once it has been settled. It builds on the Sprint 2 feature slice rather than replacing any of it.
+
+**What's new**
+
+- **Draft/completed session lifecycle.** A recognized menu is persisted immediately as a *draft*. Leaving mid-order keeps it in History under 未完成 / *Unfinished*; completing the bill moves it to 已完成 / *Completed*. Sessions written before this field existed map to `legacyUnfinalized` — never to completed.
+- **Immutable, versioned bill snapshots.** Tapping Done writes a `BillSnapshot` (version 1) holding every line and every input and output behind the totals: chosen lines, prices and market-price notes, quantities, currencies, the FX quote with its market date and source, surcharge, totals, people count, per-person values, and completion time. Completed screens render only from that snapshot and never recompute, so a later FX refresh or settings change cannot rewrite a bill the user has already paid.
+- **History photo gallery.** The menu photos captured for a session stay with the session and reopen in capture order in a paged, zoomable gallery with a page count.
+- **A throwing persistence boundary.** `SessionStore` is the only writer of lifecycle state and snapshot bytes. `finalize` is idempotent — a second completion returns the persisted snapshot without writing — and restores the previous state if the save throws, so the UI can never show "completed" for something that was not saved. History deletion runs in an isolated, short-lived `ModelContext`, so a failed delete cannot damage what the UI is displaying.
+- **Hardening that this direction forced into the open.** `RuntimeServiceResolver` resolves the vision and FX providers as a matched pair (live Gemini + live Frankfurter, or mock vision + mock FX — never a mix); the Gemini API key moved out of `UserDefaults` into Keychain behind a `SecretStore` protocol; the capture pipeline gained stable photo ordering, explicit limits, atomic saves, and cancellation; and `Resources/PrivacyInfo.xcprivacy` plus a one-time `GeminiDisclosureGate` now sit ahead of the first live Gemini request.
+- **FX rate provenance is persisted and shown** (live / cached / manual / demo) and frozen into the snapshot, so a completed bill permanently records which kind of rate produced its totals. This closes a Sprint 2 AI-review finding that was deliberately postponed at the time.
+
+**New dependencies: none.** The app still has zero third-party runtime dependencies — only Apple frameworks (SwiftUI, SwiftData, Security/Keychain, PhotosUI, SafariServices). `project.yml` declares no packages, and there is no `Package.swift`, `Podfile`, or `Cartfile`. XcodeGen, unchanged since Sprint 1, remains the only external tool and is build-time only.
+
+**Run instructions: unchanged** — see [Quickstart](#quickstart) below. There is nothing new to configure: the expansion needs no API key and works fully offline with the demo provider.
+
+**How to demonstrate it in about a minute.** Turn on **示範模式（Mock 數據）/ Demo Mode (Mock Data)** in Settings, recognize a menu, add a couple of dishes, open Bill — then leave *without* tapping Done: the session appears in History as *Unfinished*. Reopen it and tap Done and it moves to *Completed*; reopening it now shows the frozen order and bill with no quantity steppers, no surcharge control and no rate refresh, and the photo-stack button replays the original menu photos in capture order.
+
+**Where to look.** `Menuscript/Models/BillSnapshot.swift`, `Menuscript/Models/MenuSession.swift`, `Menuscript/Services/SessionStore.swift`, `Menuscript/Services/RuntimeServiceResolver.swift`, `Menuscript/Features/Menu/HistoryPhotoGalleryView.swift`. The design rationale is in [docs/architecture.md](docs/architecture.md); the hands-on evidence is in [docs/manual-verification.md](docs/manual-verification.md).
 
 ## Quickstart
 
@@ -61,7 +82,7 @@ Running one full feature slice end to end, from a fresh launch:
 
 **With the mock provider** (Settings → mock-provider toggle on, no API key required): recognition and FX conversion use fixed, deterministic providers. The full core Capture → Menu → Bill → History flow makes no network request. The dish photo-search button remains an explicit external web action: tapping it opens Google Images in `SFSafariViewController`.
 
-**With a real Gemini API key** (Settings → enter a key, mock-provider toggle off): Capture sends the selected menu images, target language, and any food-sensitivity preferences directly to Google's Gemini `generateContent` API. Dish-explanation requests send the selected dish text. The user-supplied API key authenticates those direct Google requests and may associate the data with the user's Google project. Menuscript has no proxy server. This path requires network access and a valid key, and has so far been exercised in development primarily through unit/integration tests rather than a full run on a physical device (see Intentionally Deferred Features below).
+**With a real Gemini API key** (Settings → enter a key, mock-provider toggle off): Capture sends the selected menu images, target language, and any food-sensitivity preferences directly to Google's Gemini `generateContent` API. Dish-explanation requests send the selected dish text. The user-supplied API key authenticates those direct Google requests and may associate the data with the user's Google project. Menuscript has no proxy server. This path requires network access and a valid key. It has been exercised end to end in the simulator with a real key — one live run recognized 36 dishes from a photo of a handwritten Japanese izakaya menu, recorded in [docs/manual-verification.md](docs/manual-verification.md) — but never on physical hardware (see Intentionally Deferred Features below).
 
 ## Privacy & Data Handling
 
@@ -72,9 +93,9 @@ Running one full feature slice end to end, from a fresh launch:
 
 ## Intentionally Deferred Features
 
-These are explicitly out of scope for the current prototype — not oversights, but deferred so the core feature slice (capture → recognize/translate → order → bill → history) stays the focus of Sprint 2:
+These are explicitly out of scope for the current prototype — not oversights, but deferred so that the core feature slice (capture → recognize/translate → order → bill → history) and the Sprint 3 persistence expansion built on top of it stay the focus:
 
-- **Real-device, live-API end-to-end verification** — development so far has leaned on the mock provider and simulator; a full run with a live Gemini key on a physical device is outstanding.
+- **Real-device verification** — the live Gemini path has been exercised end to end in the simulator with a real key (`docs/manual-verification.md`, § 2026-07-22), but the app has never been run on physical hardware, so real camera capture and on-device performance remain unverified.
 - **Additional UI/menu languages** — only Traditional Chinese and English are supported today; broader language coverage is future scope, not a limitation on who the app is meant to serve.
 - **Itemized (unequal) bill splitting and tip calculators** — the current split is always even ("AA") across diners.
 - **Offline live recognition** — live Gemini recognition has no on-device fallback. Mock mode is fully offline for the core flow, but returns fixed demo content rather than recognizing the photographed menu.
@@ -87,7 +108,9 @@ These are explicitly out of scope for the current prototype — not oversights, 
 
 - [Project Vision](docs/project-vision.md) — problem, users, goals, scope
 - [Requirements](docs/requirements.md) — functional, data, and non-functional requirements
-- [Architecture](docs/architecture.md) — components, data flow, open questions
+- [Architecture](docs/architecture.md) — components, data flow, how the architecture evolved through Sprint 3, open questions
+- [Manual Verification](docs/manual-verification.md) — hands-on test cases with expected and observed results, issues found, and what was deliberately not exercised
+- [AI Implementation Review](docs/ai-implementation-review.md) — how AI was used per sprint, the AI-assisted engineering reviews, and which findings were accepted or postponed
 
 ## Setup Notes
 
