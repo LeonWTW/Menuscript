@@ -178,6 +178,11 @@ struct RootView: View {
         }
         let demoViewModel = CaptureViewModel(modelContext: modelContext)
         demoViewModel.addPhotos([Self.demoImage()])
+        while demoViewModel.pendingPhotoCount > 0 {
+            guard !Task.isCancelled else { return }
+            await Task.yield()
+        }
+        guard !Task.isCancelled, demoViewModel.canRecognize else { return }
         await demoViewModel.recognize()
         if let session = demoViewModel.completedSession {
             let sortedItems = session.items.sorted { $0.sortOrder < $1.sortOrder }

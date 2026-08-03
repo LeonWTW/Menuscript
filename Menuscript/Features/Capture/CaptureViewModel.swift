@@ -3,6 +3,18 @@ import Observation
 import SwiftData
 import UIKit
 
+/// Carries one immutable UIKit image into the JPEG preparation task. UIImage
+/// is only read by the injected, `@Sendable` preparer and is never shared back
+/// to the main actor from that task.
+private struct SendablePreparationImage: @unchecked Sendable {
+    let image: UIImage
+}
+
+private struct PhotoPreparationRequest: Sendable {
+    let id: UUID
+    let image: SendablePreparationImage
+}
+
 /// Drives the "capture → recognize → persist" flow for a menu: holds the
 /// photos the user has gathered, resolves a `MenuVisionProvider` (mock or
 /// Gemini, per Settings) when none is injected, extracts and translates the
@@ -12,6 +24,7 @@ import UIKit
 final class CaptureViewModel: Identifiable {
     typealias RuntimeResolver = @MainActor () throws -> RuntimeServices?
     typealias ContextSave = @MainActor (ModelContext) throws -> Void
+    typealias PhotoPreparer = @Sendable (UIImage) -> ImagePrep.PreparedPhoto?
 
     static let liveDisclosureAcceptedKey = "privacy.googleGeminiDisclosureAccepted.v1"
 
@@ -62,7 +75,7 @@ final class CaptureViewModel: Identifiable {
     private let liveFXFactory: RuntimeServiceResolver.LiveFXFactory
     private let runtimeResolver: RuntimeResolver?
     private let defaults: UserDefaults
-    private let photoPreparer: (UIImage) -> ImagePrep.PreparedPhoto?
+    private let photoPreparer: PhotoPreparer
     private let saveContext: ContextSave
     private var recognizeTask: Task<Void, Never>?
 
@@ -75,7 +88,7 @@ final class CaptureViewModel: Identifiable {
         liveFXFactory: @escaping RuntimeServiceResolver.LiveFXFactory = { FXService() },
         runtimeResolver: RuntimeResolver? = nil,
         defaults: UserDefaults = .standard,
-        photoPreparer: @escaping (UIImage) -> ImagePrep.PreparedPhoto? = ImagePrep.preparedPhoto(from:),
+        photoPreparer: @escaping PhotoPreparer = ImagePrep.preparedPhoto(from:),
         saveContext: @escaping ContextSave = { try $0.save() }
     ) {
         self.modelContext = modelContext
@@ -95,39 +108,50 @@ final class CaptureViewModel: Identifiable {
     }
 
     /// Camera, DEBUG and direct-call entry point. The global cap is enforced
-    /// here as a final authority, and every accepted image occupies a stable
-    /// slot even if its JPEG preparation fails.
+    /// here as a final authority, and every accepted image reserves a stable
+    /// slot before JPEG preparation moves off the main actor.
     @discardableResult
     func addPhotos(_ images: [UIImage]) -> PhotoAddResult {
-        let acceptedCount = min(images.count, remainingPhotoCapacity)
-        let rejectedCount = images.count - acceptedCount
+        let reservation = reservePhotoSlots(count: images.count)
+        let photoPreparer = photoPreparer
+        var requests: [PhotoPreparationRequest] = []
+        requests.reserveCapacity(reservation.ids.count)
 
-        var preparationFailures = 0
-        for image in images.prefix(acceptedCount) {
-            if let prepared = photoPreparer(image), !prepared.jpegData.isEmpty {
-                photos.append(CapturedPhoto(
-                    preview: prepared.preview,
-                    state: .ready(prepared.jpegData)
-                ))
-            } else {
-                preparationFailures += 1
-                photos.append(CapturedPhoto(
-                    preview: image,
-                    state: .failed(.jpegEncodingFailed)
-                ))
+        for (id, image) in zip(reservation.ids, images.prefix(reservation.ids.count)) {
+            if let index = photos.firstIndex(where: { $0.id == id }) {
+                // Direct camera/DEBUG additions already have a preview. Keep
+                // it visible if background JPEG encoding later fails.
+                photos[index].preview = image
+            }
+            requests.append(
+                PhotoPreparationRequest(
+                    id: id,
+                    image: SendablePreparationImage(image: image)
+                )
+            )
+        }
+
+        Task { @MainActor [weak self, photoPreparer, requests] in
+            for request in requests {
+                let result = await Task.detached(priority: .userInitiated) {
+                    let result: Result<ImagePrep.PreparedPhoto, CapturedPhotoFailure>
+                    if let prepared = photoPreparer(request.image.image) {
+                        result = .success(prepared)
+                    } else {
+                        result = .failure(.jpegEncodingFailed)
+                    }
+                    return result
+                }.value
+
+                guard !Task.isCancelled else { return }
+                self?.resolvePhotoSlot(id: request.id, with: result)
             }
         }
 
-        if rejectedCount > 0 {
-            captureIssue = .photoLimitExceeded(
-                maximum: CaptureLimits.maxPhotoCount,
-                rejected: rejectedCount
-            )
-        } else if preparationFailures > 0 {
-            captureIssue = .photoPreparationFailed(count: failedPhotoCount)
-        }
-
-        return PhotoAddResult(accepted: acceptedCount, rejected: rejectedCount)
+        return PhotoAddResult(
+            accepted: reservation.ids.count,
+            rejected: reservation.rejected
+        )
     }
 
     func removePhoto(at index: Int) {
@@ -404,10 +428,11 @@ final class CaptureViewModel: Identifiable {
             let fxProvider: any FXRateProviding
             if let injectedFXProvider {
                 fxProvider = injectedFXProvider
-            } else if mode == .mock {
-                fxProvider = MockFXService()
             } else {
-                fxProvider = liveFXFactory()
+                // An injected vision provider is a test/preview seam. Keep
+                // it hermetic unless its caller explicitly opts into an FX
+                // dependency, regardless of the inferred provenance mode.
+                fxProvider = MockFXService()
             }
             return (
                 RuntimeServices(
