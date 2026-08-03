@@ -223,3 +223,35 @@ Three of these cases cannot be reached through the UI alone. Each shortcut is re
 ### Status
 
 Seven of the nine cases in § 2026-07-15 now carry observed results: cases 5 and 6 as full passes, cases 3, 4, 7 and 8 as partials whose unmet portions are enumerated above, and case 9 from 2026-07-22. The two remaining cases, 1 and 2, are blocked only on running the app with a live Gemini key. The unmet portions cluster into three honest categories rather than scattered gaps — what the simulator cannot do (camera TCC), what was deliberately not touched (host network, the stored key), and what the design makes unreachable (the permissionless picker's usage string). None of them is an unverified claim about persistence behaviour, which was the direction this sprint actually expanded.
+
+## 2026-08-02 — Sprint 4 Quality Verification
+
+Sprint 4 verifies the Demo Mode offline guarantee and the seams that support it. The implementation work is recorded as three single-purpose commits on `sprint-4-quality`, based on `origin/main` `d5794d6`. The branch has not yet been merged; this section records verification evidence without claiming a completed merge.
+
+### Automated verification — PASS
+
+| Check | Command / scope | Observed result |
+|---|---|---|
+| Fresh project generation | `xcodegen generate` from the repository root | **PASS.** Completed independently before the test run. |
+| Full suite | `xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` on iPhone 17 Pro / iOS 26.3.1 | **PASS.** Result `Passed`; `totalTestCount = 220`, `passedTests = 220`; device-dynamic runs passed = 245; 0 failed, 0 skipped, 0 expected failures. |
+| F2 stress check | The two focused direct-photo preparation tests, repeated 10 times | **PASS.** All repetitions passed, covering off-main preparation and stable ordering. |
+| Diff hygiene | `git diff --check` over the Sprint 4 documentation files | **PASS.** No whitespace errors. |
+
+The suite includes the resolver precedence matrix; mock explanation/bill wiring with no secret or live-FX factory evaluation; explanation-cache provenance; direct-photo reservation, cap, off-main preparation, ordering, and failure blocking; permissive target-language fixtures; added FX cross-rates and copy; required `ExplainSheet` defaults / production wiring; and injected-vision FX hermeticity.
+
+### Pending physical-device and network smoke checklist
+
+No physical-device, airplane-mode, or live-key smoke test was performed in this environment. Each case below is deliberately **Pending**, not inferred from the simulator suite.
+
+| ID | Steps | Expected result | Observed result |
+|---|---|---|---|
+| F1 | On a physical device, first create or reopen a session recorded as live with a valid Gemini key (the live-key smoke), then enable Demo Mode, remove/disable the usable key for the test device, enable airplane mode, request a dish explanation, and refresh the bill FX rate. Reopen the session after dismissing the sheet. | Explanation and supported mock FX succeed offline with no consent prompt; no live request can occur. The session's existing live explanation is not replaced by the Demo-Mode explanation. | **Pending — not performed in this environment.** |
+| F2 | Use the physical camera to add several photos, including a quick multi-photo addition; also run the DEBUG demo path if available. Repeat while watching the camera-dismiss transition, ordering, capacity feedback, and recognition eligibility after deliberately causing a preparation failure in a DEBUG/test build. | JPEG preparation does not stall the main UI; accepted photos retain capture order; the cap is immediate; a failed preparation blocks recognition rather than submitting a partial batch; cancelled demo navigation does not continue recognition. | **Pending — not performed in this environment.** |
+| F3 | In Demo Mode, recognize with target-language values `en`, `English (US)`, `廣東話`, `简体中文`, `日本語`, and an arbitrary string; open an explanation for at least one non-English fallback case. | `en` and text containing `english` use English fixture copy. Every other input succeeds deterministically with Traditional Chinese fixture copy; no unsupported-language alert is shown. | **Pending — not performed in this environment.** |
+| F4 | In Demo Mode set home currency to PHP, then exercise a menu-to-bill conversion and refresh. Repeat with one other added currency (for example INR) and with an intentionally unsupported ISO-like code/pair. | Supported pairs show a deterministic mock conversion offline. An unsupported mock pair shows the Demo-Mode coverage message, not the live-network troubleshooting copy. | **Pending — not performed in this environment.** |
+| F5 | In a debug/injected-defaults build, set Demo Mode only in the injected defaults and open a Menu dish explanation and Bill. Repeat with a live-mode injected setting and verify the disclosure/key path follows that same injected setting. | The explanation and bill read the same defaults scope and share the intended live-FX factory; no hidden fallback to `UserDefaults.standard` changes the selected mode. | **Pending — requires the injected-defaults smoke harness; not performed in this environment.** |
+| F6 | In a debug/preview or test harness, inject a non-mock vision provider without an FX provider, run recognition with currencies that require conversion, then repeat with an explicit FX provider. | Omitted FX uses `MockFXService` regardless of inferred vision provenance; an explicit FX provider wins. The ordinary production resolver still chooses the live pair only when Demo Mode is off. | **Pending — requires the injection harness; not performed in this environment.** |
+
+### Defects found during Sprint 4 review and resolution
+
+The initial implementation passed its first full automated run, but a subsequent specification review found four correctness gaps before this verification record was written: a Demo-Mode explanation could overwrite a live-session cache; the target classifier did not honor strings containing `English`; the live-FX factory could be evaluated twice when constructing the Bill; and DEBUG auto-demo waited with a nondeterministic fixed count of 1,000 yields. The implementation now uses the cache provenance guard, `contains("english")` classifier, one `BillFXProviderSelection` resolution, and a cancellation-aware pending-photo wait described above. The final Sol/max specification gate and the independent standards/correctness gate both reported no blocker, P1, or P2 finding. The standards review's only earlier note was low-severity duplication of a test-only wait helper.
