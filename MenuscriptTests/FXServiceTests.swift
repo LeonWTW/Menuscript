@@ -331,6 +331,49 @@ final class FXServiceTests {
         #expect(await service.rate(from: "ZZZ", to: "ZZZ") == nil)
     }
 
+    @Test("Mock FX supports the required demo travel currencies with stable cross-rates")
+    func mockFXSupportsRequiredTravelCurrencies() async throws {
+        let service = MockFXService()
+        let expectedUSDQuotes: [String: Double] = [
+            "PHP": 58.5,
+            "INR": 86.5,
+            "IDR": 16_300,
+            "MYR": 4.45,
+            "NZD": 1.66,
+            "DKK": 6.86,
+            "NOK": 11,
+            "SEK": 10.5,
+            "PLN": 3.95,
+            "CZK": 23,
+            "TRY": 36,
+            "AED": 3.6725,
+            "SAR": 3.75,
+            "BRL": 5.80,
+            "ZAR": 18.5,
+        ]
+
+        for (currency, expectedRate) in expectedUSDQuotes {
+            let quote = try #require(await service.rate(from: "USD", to: currency))
+            #expect(quote.rate == expectedRate)
+            #expect(quote.source == .mock)
+            #expect(quote.quoteDate == MockFXService.fixedQuoteDate)
+            #expect(quote.rate.isFinite)
+            #expect(quote.rate > 0)
+        }
+
+        let jpyToPHP = try #require(await service.rate(from: "JPY", to: "PHP"))
+        #expect(jpyToPHP.rate == 0.365625)
+        #expect(jpyToPHP.source == .mock)
+        #expect(jpyToPHP.quoteDate == MockFXService.fixedQuoteDate)
+        #expect(jpyToPHP.rate.isFinite)
+        #expect(jpyToPHP.rate > 0)
+
+        let phpToINR = try #require(await service.rate(from: "PHP", to: "INR"))
+        let inrToNZD = try #require(await service.rate(from: "INR", to: "NZD"))
+        let phpToNZD = try #require(await service.rate(from: "PHP", to: "NZD"))
+        #expect(abs((phpToINR.rate * inrToNZD.rate) - phpToNZD.rate) < 0.000_000_000_001)
+    }
+
     private func makeService(
         now currentTime: Date? = nil
     ) -> FXService {

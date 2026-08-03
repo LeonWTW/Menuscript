@@ -168,6 +168,17 @@ struct RuntimeWiringTests {
         }
     }
 
+    private func waitUntil(
+        maxIterations: Int = 10_000,
+        _ condition: () async -> Bool
+    ) async -> Bool {
+        for _ in 0..<maxIterations {
+            if await condition() { return true }
+            await Task.yield()
+        }
+        return false
+    }
+
     @Test("Production mock capture is offline and persists mock provenance")
     func productionMockCaptureIsFullyOffline() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: true)
@@ -184,6 +195,7 @@ struct RuntimeWiringTests {
             defaults: defaults
         )
         viewModel.addPhotos([makeDemoImage()])
+        #expect(await waitUntil { viewModel.pendingPhotoCount == 0 })
 
         await viewModel.recognize()
 
@@ -215,6 +227,7 @@ struct RuntimeWiringTests {
             defaults: defaults
         )
         viewModel.addPhotos([makeDemoImage()])
+        #expect(await waitUntil { viewModel.pendingPhotoCount == 0 })
 
         await viewModel.recognize()
         #expect(viewModel.needsLiveDisclosure)
@@ -234,6 +247,7 @@ struct RuntimeWiringTests {
         #expect(viewModel.completedSession?.providerMode == .live)
 
         viewModel.addPhotos([makeDemoImage()])
+        #expect(await waitUntil { viewModel.pendingPhotoCount == 0 })
         await viewModel.recognize()
         #expect(viewModel.needsLiveDisclosure == false)
         #expect(await vision.extractCalls() == 2)
@@ -254,6 +268,7 @@ struct RuntimeWiringTests {
             defaults: injectedDefaults
         )
         invalidKeyViewModel.addPhotos([makeDemoImage()])
+        #expect(await waitUntil { invalidKeyViewModel.pendingPhotoCount == 0 })
 
         await invalidKeyViewModel.recognize()
 
@@ -270,6 +285,7 @@ struct RuntimeWiringTests {
             defaults: liveDefaults
         )
         unavailableViewModel.addPhotos([makeDemoImage()])
+        #expect(await waitUntil { unavailableViewModel.pendingPhotoCount == 0 })
 
         await unavailableViewModel.recognize()
 
@@ -322,12 +338,84 @@ struct RuntimeWiringTests {
         #expect(liveFactoryCalls.count == 0)
     }
 
+    @Test("Demo mode overrides persisted live provenance for explanation and bill FX")
+    func demoToggleOverridesPersistedLiveDependencies() async throws {
+        let (defaults, suiteName) = try makeDefaults(useMock: true)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let secrets = WiringSecretStore(shouldFailRead: true)
+        let liveFactoryCalls = WiringInvocationCounter()
+
+        #expect(!GeminiDisclosureGate.requiresConsent(
+            explicitMode: .live,
+            defaults: defaults
+        ))
+        let explanation = try await DishExplanationService.fetch(
+            original: "唐揚げ",
+            detectedLanguage: "Japanese",
+            targetLanguage: "English",
+            providerMode: .live,
+            secretStore: secrets,
+            defaults: defaults,
+            liveFXFactory: {
+                liveFactoryCalls.increment()
+                return WiringFXProvider()
+            }
+        )
+
+        #expect(explanation.contains("popular izakaya dish"))
+        #expect(secrets.readCount == 0)
+        #expect(liveFactoryCalls.count == 0)
+
+        let session = MenuSession(
+            detectedLanguage: "Japanese",
+            targetLanguage: "English",
+            menuCurrency: "JPY",
+            homeCurrency: "USD",
+            providerModeRaw: RuntimeMode.live.rawValue
+        )
+        let selection = MenuView.billFXSelection(
+            for: session,
+            defaults: defaults,
+            liveFXFactory: {
+                liveFactoryCalls.increment()
+                return WiringFXProvider()
+            }
+        )
+
+        #expect(selection.mode == .mock)
+        #expect(selection.provider is MockFXService)
+        #expect(liveFactoryCalls.count == 0)
+    }
+
+    @Test("Explanation cache persists only when runtime and session provenance are compatible")
+    func explanationCachePolicyProtectsPersistedProvenance() {
+        let cases: [(
+            persistedMode: RuntimeMode?,
+            effectiveMode: RuntimeMode,
+            shouldPersist: Bool
+        )] = [
+            (.live, .live, true),
+            (.live, .mock, false),
+            (.mock, .mock, true),
+            (.mock, .live, false),
+            (nil, .mock, true),
+            (nil, .live, true),
+        ]
+
+        for testCase in cases {
+            #expect(DishExplanationCachePolicy.shouldPersist(
+                persistedMode: testCase.persistedMode,
+                effectiveMode: testCase.effectiveMode
+            ) == testCase.shouldPersist)
+        }
+    }
+
     @Test("Explicit and legacy live explanations require consent before one provider call")
     func liveExplanationDisclosureGatesProviderCalls() async throws {
         #expect(GeminiDisclosureGate.acceptedKey == CaptureViewModel.liveDisclosureAcceptedKey)
 
         let cases: [(providerMode: RuntimeMode?, useMockPreference: Bool)] = [
-            (.live, true),
+            (.live, false),
             (nil, false),
         ]
         for testCase in cases {

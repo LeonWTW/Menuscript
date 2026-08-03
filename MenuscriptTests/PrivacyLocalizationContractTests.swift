@@ -20,6 +20,10 @@ struct PrivacyLocalizationContractTests {
             "en": "Not included in the completed order",
             "zh-Hant": "未有加入已完成訂單",
         ],
+        "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。": [
+            "en": "Demo Mode doesn't support this currency pair yet. Choose another currency in Settings.",
+            "zh-Hant": "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。",
+        ],
     ]
 
     private static let criticalKeys = [
@@ -68,6 +72,7 @@ struct PrivacyLocalizationContractTests {
         "辨識暫時失敗，請再試一次。",
         "菜式解釋暫時失敗，請再試一次。",
         "更新匯率失敗",
+        "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。",
         "暫時攞唔到最新匯率，請檢查網絡或稍後再試。",
         "最新匯率未能儲存，請稍後再試。",
         "%@（示範匯率，%@）",

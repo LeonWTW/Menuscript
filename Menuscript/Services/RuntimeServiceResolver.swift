@@ -10,8 +10,11 @@ struct RuntimeServiceConfiguration: Equatable, Sendable {
     var geminiModel: String = "gemini-2.5-flash"
 }
 
-/// The vision and FX providers must be resolved as one unit. In particular,
-/// mock vision can never accidentally retain the live FX provider.
+/// Production resolution keeps vision and FX providers as one unit, so mock
+/// vision can never accidentally retain the live FX provider. Test and
+/// preview injection defaults custom vision to mock FX when no FX provider is
+/// supplied, keeping the seam network-hermetic while preserving separate
+/// vision and FX provenance.
 struct RuntimeServices: Sendable {
     let mode: RuntimeMode
     let visionProvider: any MenuVisionProvider
@@ -22,14 +25,16 @@ enum RuntimeServiceResolver {
     typealias LiveFXFactory = @Sendable () -> any FXRateProviding
 
     /// Returns the mode to use without changing persisted provider provenance.
-    /// A mode recorded with a session always wins; legacy sessions fall back
-    /// to the injected preferences.
+    /// The Demo Mode toggle always wins so an older live session can never
+    /// override the user's current offline guarantee. With Demo Mode off,
+    /// persisted provenance still wins and legacy sessions use live mode.
     static func effectiveMode(
         persistedMode: RuntimeMode?,
         defaults: UserDefaults
     ) -> RuntimeMode {
-        persistedMode
-            ?? (defaults.bool(forKey: SettingsKeys.useMockProvider) ? .mock : .live)
+        defaults.bool(forKey: SettingsKeys.useMockProvider)
+            ? .mock
+            : (persistedMode ?? .live)
     }
 
     /// Core resolver. The mock branch does not touch SecretStore, URLSession or

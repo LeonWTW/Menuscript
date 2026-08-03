@@ -2,6 +2,15 @@ import Foundation
 import SwiftUI
 
 enum BillFXPresentation {
+    /// Returns the localized source key for an unavailable FX refresh. Demo
+    /// fixtures have finite coverage, while live mode failures may be network
+    /// related, so the two cases must not surface the same explanation.
+    static func unavailableMessageKey(for providerMode: RuntimeMode?) -> String {
+        providerMode == .mock
+            ? "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
+            : "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+    }
+
     static func quoteDate(
         quoteDate: String?,
         legacyDate: Date?
@@ -55,6 +64,7 @@ struct BillView: View {
     @State private var fxRefreshErrorMessage: String?
 
     private let fxProvider: any FXRateProviding
+    private let fxProviderMode: RuntimeMode
 
     private let surchargePresets: [Double] = [0, 8, 10]
     private let surchargeBounds: ClosedRange<Double> = 0...30
@@ -63,11 +73,12 @@ struct BillView: View {
     init(
         session: MenuSession,
         fxProvider: any FXRateProviding,
-        fxProviderMode: RuntimeMode? = nil,
+        fxProviderMode: RuntimeMode,
         onCompleted: @escaping () -> Void = {}
     ) {
         self.session = session
         self.fxProvider = fxProvider
+        self.fxProviderMode = fxProviderMode
         self.onCompleted = onCompleted
     }
 
@@ -372,7 +383,7 @@ struct BillView: View {
             provider: fxProvider
         ) else {
             fxRefreshErrorMessage = L10n.string(
-                "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+                BillFXPresentation.unavailableMessageKey(for: fxProviderMode)
             )
             return
         }

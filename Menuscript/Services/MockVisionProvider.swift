@@ -3,15 +3,15 @@ import Foundation
 /// Fully offline, deterministic menu provider used by demo mode.
 ///
 /// The fixture has a language-neutral core and explicit English/Traditional
-/// Chinese projections. Unsupported targets fail loudly instead of returning
-/// Cantonese content that only looks translated.
+/// Chinese projections. Demo input is intentionally permissive: unsupported
+/// target text falls back to Traditional Chinese instead of failing a demo.
 struct MockVisionProvider: MenuVisionProvider {
     func extractMenu(
         images: [Data],
         targetLanguage: String,
         allergens: [String]
     ) async throws -> ExtractedMenu {
-        let target = try MockTargetLanguage(targetLanguage)
+        let target = MockTargetLanguage(targetLanguage)
         let requestedAllergens = Self.normalizedRequestedAllergens(allergens)
 
         return ExtractedMenu(
@@ -43,7 +43,7 @@ struct MockVisionProvider: MenuVisionProvider {
         language: String,
         targetLanguage: String
     ) async throws -> String {
-        switch try MockTargetLanguage(targetLanguage) {
+        switch MockTargetLanguage(targetLanguage) {
         case .traditionalChinese:
             return "「\(original)」係呢間居酒屋嘅人氣菜式之一，選料新鮮，做法保留咗傳統日式風味。呢道菜好啱配一杯清酒或者生啤酒一齊享用，係好多熟客必點嘅選擇。"
         case .english:
@@ -153,15 +153,16 @@ private enum MockTargetLanguage {
     case traditionalChinese
     case english
 
-    init(_ rawValue: String) throws {
+    init(_ rawValue: String) {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch trimmed.lowercased() {
-        case "english", "en":
+        let normalized = trimmed.lowercased()
+
+        if normalized == "en" || normalized.contains("english") {
             self = .english
-        case "繁體中文", "traditional chinese", "zh-hant", "zh_hant":
+        } else {
+            // Chinese locales and every unknown value intentionally share the
+            // only non-English fixture projection, so demo input never fails.
             self = .traditionalChinese
-        default:
-            throw VisionProviderError.unsupportedTargetLanguage(trimmed)
         }
     }
 

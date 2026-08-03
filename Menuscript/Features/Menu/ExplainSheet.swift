@@ -112,11 +112,24 @@ enum DishExplanationService {
     }
 }
 
+/// Decides whether a fetched explanation can safely become part of a
+/// session's persisted cache. Legacy sessions have no recorded provenance,
+/// while recorded sessions only persist results produced by the same mode.
+enum DishExplanationCachePolicy {
+    static func shouldPersist(
+        persistedMode: RuntimeMode?,
+        effectiveMode: RuntimeMode
+    ) -> Bool {
+        guard let persistedMode else { return true }
+        return persistedMode == effectiveMode
+    }
+}
+
 /// Explains a single dish in the target language. Shows the cached
 /// `item.explanation` immediately when one already exists (no network call);
 /// otherwise resolves a `MenuVisionProvider` on appearance and fetches one.
-/// The toolbar's 重新生成 action always re-fetches and overwrites the cache,
-/// even when a cached explanation is already on screen.
+/// The toolbar's 重新生成 action always re-fetches. Results with incompatible
+/// runtime/session provenance remain transient instead of corrupting cache.
 struct ExplainSheet: View {
     @Bindable private var item: MenuItem
 
@@ -128,6 +141,7 @@ struct ExplainSheet: View {
     @State private var showSettings = false
     @State private var disclosureIsRequired = false
     @State private var showDisclosure = false
+    @State private var transientExplanation: String?
 
     private let secretStore: any SecretStore
     private let defaults: UserDefaults
@@ -139,7 +153,7 @@ struct ExplainSheet: View {
         item: MenuItem,
         actionContext: MenuItemActionContext? = nil,
         secretStore: any SecretStore = KeychainStore(),
-        defaults: UserDefaults = .standard,
+        defaults: UserDefaults,
         liveFXFactory: @escaping RuntimeServiceResolver.LiveFXFactory = { FXService() },
         onDeleteAllSucceeded: @escaping () -> Void = {}
     ) {
@@ -151,8 +165,18 @@ struct ExplainSheet: View {
         self.onDeleteAllSucceeded = onDeleteAllSucceeded
     }
 
+    private var displayedExplanation: String? {
+        if let transientExplanation, !transientExplanation.isEmpty {
+            return transientExplanation
+        }
+        if let explanation = item.explanation, !explanation.isEmpty {
+            return explanation
+        }
+        return nil
+    }
+
     private var hasCachedExplanation: Bool {
-        !(item.explanation?.isEmpty ?? true)
+        displayedExplanation != nil
     }
 
     var body: some View {
@@ -224,7 +248,7 @@ struct ExplainSheet: View {
             loadingState
         } else if let errorMessage {
             errorState(errorMessage)
-        } else if let explanation = item.explanation, !explanation.isEmpty {
+        } else if let explanation = displayedExplanation {
             loadedState(explanation)
         } else {
             // .task hasn't produced a result yet; avoid a blank flash.
@@ -323,6 +347,10 @@ struct ExplainSheet: View {
         defer { isLoading = false }
 
         do {
+            let effectiveMode = GeminiDisclosureGate.effectiveMode(
+                explicitMode: actionContext.providerMode,
+                defaults: defaults
+            )
             let result = try await DishExplanationService.fetchIfNeeded(
                 currentExplanation: item.explanation,
                 forceRefresh: forceRefresh,
@@ -332,7 +360,15 @@ struct ExplainSheet: View {
                 liveFXFactory: liveFXFactory
             )
             guard !Task.isCancelled else { return }
-            item.explanation = result
+            if DishExplanationCachePolicy.shouldPersist(
+                persistedMode: actionContext.providerMode,
+                effectiveMode: effectiveMode
+            ) {
+                item.explanation = result
+                transientExplanation = nil
+            } else {
+                transientExplanation = result
+            }
         } catch {
             guard !Task.isCancelled else { return }
             if error as? GeminiDisclosureError == .consentRequired {
@@ -364,6 +400,6 @@ struct ExplainSheet: View {
                 lowConfidence: true,
                 explanation: "「唐揚げ」係日式炸雞嘅一種，用生粉同醬油醃料炸至外脆內嫩，係居酒屋常見嘅下酒菜。",
                 sortOrder: 0
-            ))
+            ), defaults: .standard)
         }
 }

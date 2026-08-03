@@ -9,6 +9,22 @@ import Testing
 @Suite("BillView derived numbers")
 struct BillViewLogicTests {
 
+    @Test("FX refresh failure copy distinguishes Demo Mode coverage from live-network failure")
+    func fxRefreshFailureCopyMatchesProviderMode() {
+        #expect(
+            BillFXPresentation.unavailableMessageKey(for: .mock)
+                == "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
+        )
+        #expect(
+            BillFXPresentation.unavailableMessageKey(for: .live)
+                == "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+        )
+        #expect(
+            BillFXPresentation.unavailableMessageKey(for: nil)
+                == "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+        )
+    }
+
     private func makeItem(priceValue: Decimal?, quantity: Int, sortOrder: Int) -> MenuItem {
         MenuItem(
             originalName: "dish",

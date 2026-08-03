@@ -38,7 +38,7 @@ private final class EffectiveModeInvocationCounter: @unchecked Sendable {
 @MainActor
 @Suite("Effective runtime mode", .serialized)
 struct EffectiveRuntimeModeTests {
-    @Test("Persisted mode wins; legacy mode follows preferences without mutation")
+    @Test("Demo toggle wins; otherwise persisted mode preserves provenance without mutation")
     func sixCaseMatrix() throws {
         let cases: [(
             persistedMode: RuntimeMode?,
@@ -47,7 +47,7 @@ struct EffectiveRuntimeModeTests {
         )] = [
             (.mock, true, .mock),
             (.mock, false, .mock),
-            (.live, true, .live),
+            (.live, true, .mock),
             (.live, false, .live),
             (nil, true, .mock),
             (nil, false, .live),

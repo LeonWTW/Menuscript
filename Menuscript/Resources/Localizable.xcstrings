@@ -3063,6 +3063,22 @@
         }
       }
     },
+    "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demo Mode doesn't support this currency pair yet. Choose another currency in Settings."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
+          }
+        }
+      }
+    },
     "暫時攞唔到最新匯率，請檢查網絡或稍後再試。" : {
       "localizations" : {
         "en" : {

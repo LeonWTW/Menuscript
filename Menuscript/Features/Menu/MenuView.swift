@@ -127,10 +127,12 @@ struct MenuView: View {
                 photoSearchSheet(for: selection.context)
             }
             .sheet(isPresented: $showBill) {
+                let selection = billFXSelection
                 NavigationStack {
                     BillView(
                         session: session,
-                        fxProvider: billFXSelection.provider,
+                        fxProvider: selection.provider,
+                        fxProviderMode: selection.mode,
                         onCompleted: onSessionCompleted
                     )
                         .navigationTitle("帳單")
@@ -256,6 +258,8 @@ struct MenuView: View {
         ExplainSheet(
             item: selection.cacheOwner,
             actionContext: selection.context,
+            defaults: defaults,
+            liveFXFactory: liveFXFactory,
             onDeleteAllSucceeded: onSessionCompleted
         )
     }
