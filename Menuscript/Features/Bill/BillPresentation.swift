@@ -1,5 +1,9 @@
+// Builds read-only, display-ready bill values from either an editable session
+// or its frozen completion snapshot, keeping arithmetic out of SwiftUI.
+
 import Foundation
 
+/// One order row normalized for display from either a live item or snapshot line.
 struct BillDisplayLine: Identifiable, Equatable, Sendable {
     let originalName: String
     let translatedName: String
@@ -8,10 +12,13 @@ struct BillDisplayLine: Identifiable, Equatable, Sendable {
     let quantity: Int
     let sortOrder: Int
 
+    /// Creates a stable list identity from the line's order and names because
+    /// snapshot rows do not carry SwiftData object identifiers.
     var id: String {
         "\(sortOrder)|\(originalName)|\(translatedName)"
     }
 
+    /// Copies the fields needed to show a currently editable menu item.
     init(_ item: MenuItem) {
         originalName = item.originalName
         translatedName = item.translatedName
@@ -21,6 +28,7 @@ struct BillDisplayLine: Identifiable, Equatable, Sendable {
         sortOrder = item.sortOrder
     }
 
+    /// Copies the same fields from an immutable completed-bill line.
     init(_ line: BillSnapshot.Line) {
         originalName = line.originalName
         translatedName = line.translatedName
@@ -53,6 +61,8 @@ struct BillDisplayModel: Equatable, Sendable {
     let perPersonConverted: Decimal?
     let hasUnpricedLines: Bool
 
+    /// Calculates a draft bill from selected live items using `BillMath` for
+    /// subtotal, surcharge, conversion, and rounded per-person amounts.
     static func draft(_ session: MenuSession) -> BillDisplayModel {
         let lines = session.items
             .filter { $0.quantity > 0 }
@@ -102,6 +112,8 @@ struct BillDisplayModel: Equatable, Sendable {
         )
     }
 
+    /// Copies every completed value from the frozen snapshot without recalculating
+    /// or falling back to fields that may have changed on the session.
     static func completed(_ snapshot: BillSnapshot) -> BillDisplayModel {
         BillDisplayModel(
             isReadOnly: true,
@@ -125,10 +137,14 @@ struct BillDisplayModel: Equatable, Sendable {
     }
 }
 
+/// Forces the Bill screen to distinguish valid content from unsafe completed
+/// history rather than silently rebuilding missing snapshot data.
 enum BillPresentationState: Equatable, Sendable {
     case content(BillDisplayModel)
     case unavailable(SessionBillUnavailableReason)
 
+    /// Resolves editable, completed, or unavailable presentation directly from
+    /// the session's validated bill state.
     static func resolve(for session: MenuSession) -> BillPresentationState {
         switch session.billState {
         case .draft:
@@ -140,13 +156,17 @@ enum BillPresentationState: Equatable, Sendable {
         }
     }
 
+    /// Extracts display values for callers that do not need the unavailable reason.
     var displayModel: BillDisplayModel? {
         guard case .content(let model) = self else { return nil }
         return model
     }
 }
 
+/// Adds user-facing wording to the model-level reasons a bill is unavailable.
 extension SessionBillUnavailableReason {
+    /// Explains why a completed bill cannot be safely displayed, including an
+    /// unsupported snapshot version when available.
     var localizedMessage: String {
         switch self {
         case .missing:

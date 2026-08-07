@@ -1,9 +1,13 @@
+// Coordinates the app's top-level history, capture, settings, and navigation
+// flows while delegating persistence and feature details to focused types.
+
 import SwiftData
 import SwiftUI
 #if DEBUG
 import UIKit
 #endif
 
+/// The home screen and navigation hub for saved menu sessions.
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MenuSession.createdAt, order: .reverse) private var sessions: [MenuSession]
@@ -13,14 +17,17 @@ struct RootView: View {
     @State private var showCancelCaptureConfirm = false
     @State private var persistenceErrorMessage: String?
 
+    /// Selects sessions that can still be edited so they appear separately in history.
     private var unfinishedSessions: [MenuSession] {
         sessions.filter { !$0.isCompleted }
     }
 
+    /// Selects finalized sessions whose bills should no longer change.
     private var completedSessions: [MenuSession] {
         sessions.filter(\.isCompleted)
     }
 
+    /// Builds the history screen and presents capture, settings, errors, and destinations.
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
@@ -107,6 +114,7 @@ struct RootView: View {
         }
     }
 
+    /// Groups unfinished and completed sessions into familiar history sections.
     private var historyList: some View {
         List {
             if !unfinishedSessions.isEmpty {
@@ -121,6 +129,7 @@ struct RootView: View {
         .background(Color.mtBackground)
     }
 
+    /// Builds one history section and maps swipe-to-delete positions back to its sessions.
     private func historySection(title: LocalizedStringKey, sessions: [MenuSession]) -> some View {
         Section(title) {
             ForEach(sessions, id: \.persistentModelID) { session in
@@ -135,7 +144,7 @@ struct RootView: View {
         }
     }
 
-    /// Handles the capture cover's toolbar 取消 button. While recognition is
+    /// Handles the capture cover's toolbar Cancel button. While recognition is
     /// in flight, cancels the underlying task (instead of merely dismissing
     /// the UI while the request keeps running). Otherwise, if the user has
     /// already gathered photos, confirms before discarding them.
@@ -150,6 +159,8 @@ struct RootView: View {
         }
     }
 
+    /// Converts the optional persistence error into the Boolean binding required
+    /// by SwiftUI's alert, clearing the message when the alert closes.
     private var persistenceErrorBinding: Binding<Bool> {
         Binding(
             get: { persistenceErrorMessage != nil },
@@ -157,6 +168,8 @@ struct RootView: View {
         )
     }
 
+    /// Deletes only the selected rows in the displayed section and surfaces any
+    /// storage failure instead of making the rows disappear silently.
     private func deleteSessions(at offsets: IndexSet, from displayedSessions: [MenuSession]) {
         let sessionsToDelete = offsets.compactMap { index in
             displayedSessions.indices.contains(index) ? displayedSessions[index] : nil
@@ -169,6 +182,8 @@ struct RootView: View {
     }
 
     #if DEBUG
+    /// Drives a repeatable capture flow for debug screenshots when the hidden
+    /// `autoDemo` setting is enabled; production builds never run this helper.
     @MainActor
     private func runAutoDemoIfNeeded() async {
         guard UserDefaults.standard.bool(forKey: "autoDemo"), navigationPath.isEmpty else { return }
@@ -178,6 +193,11 @@ struct RootView: View {
         }
         let demoViewModel = CaptureViewModel(modelContext: modelContext)
         demoViewModel.addPhotos([Self.demoImage()])
+        while demoViewModel.pendingPhotoCount > 0 {
+            guard !Task.isCancelled else { return }
+            await Task.yield()
+        }
+        guard !Task.isCancelled, demoViewModel.canRecognize else { return }
         await demoViewModel.recognize()
         if let session = demoViewModel.completedSession {
             let sortedItems = session.items.sorted { $0.sortOrder < $1.sortOrder }
@@ -187,6 +207,7 @@ struct RootView: View {
         }
     }
 
+    /// Creates a tiny valid image that lets the mock recognition flow run without an extra image file.
     private static func demoImage() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
         return renderer.image { context in
@@ -195,14 +216,17 @@ struct RootView: View {
         }
     }
     #else
+    /// Keeps the call site identical in production while deliberately doing no demo work.
     @MainActor
     private func runAutoDemoIfNeeded() async {}
     #endif
 }
 
+/// Displays the human-readable summary and completion state for one saved session.
 private struct HistoryRow: View {
     let session: MenuSession
 
+    /// Builds a compact row from stable session metadata for quick scanning.
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(session.title ?? L10n.string("未命名菜單"))

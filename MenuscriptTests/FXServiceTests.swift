@@ -1,15 +1,23 @@
+// Verifies how currency services validate live quotes, persist fallbacks, honor manual rates, and behave offline.
+// Isolated preferences, a fake network transport, and controlled clocks make every
+// edge case repeatable without real web requests.
+
 import Foundation
 import Testing
 @testable import Menuscript
 
+/// A test-only network interceptor that returns scripted FX responses and records whether a request was attempted.
 private final class FXURLProtocol: URLProtocol {
     nonisolated(unsafe) static var requestHandler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
     nonisolated(unsafe) static var requestCount = 0
     nonisolated(unsafe) static var lastURL: URL?
 
+    /// Accepts every request because the injected session is used only by the FX service under test.
     override class func canInit(with request: URLRequest) -> Bool { true }
+    /// Leaves requests unchanged so assertions inspect exactly what FXService created.
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// Runs the installed response script and reports its success or failure through URLSession's normal callbacks.
     override func startLoading() {
         Self.requestCount += 1
         Self.lastURL = request.url
@@ -27,18 +35,23 @@ private final class FXURLProtocol: URLProtocol {
         }
     }
 
+    /// Requires no cleanup because every scripted response finishes synchronously.
     override func stopLoading() {}
 }
 
+/// A thread-safe clock that returns planned times in order, then keeps returning the final time.
+/// It models time passing while one asynchronous rate request is in progress.
 private final class SequencedClock: @unchecked Sendable {
     private let lock = NSLock()
     private var dates: [Date]
 
+    /// Creates a clock with at least one value so `now()` can always return a date.
     init(_ dates: [Date]) {
         precondition(!dates.isEmpty)
         self.dates = dates
     }
 
+    /// Returns and consumes the next planned time while protecting shared state with a lock.
     func now() -> Date {
         lock.lock()
         defer { lock.unlock() }
@@ -49,8 +62,11 @@ private final class SequencedClock: @unchecked Sendable {
     }
 }
 
+/// Regression coverage for live, cached, manual, and deterministic demo exchange rates.
+/// The suite is serialized because its URLProtocol fake uses shared static state.
 @Suite("FX services", .serialized)
 final class FXServiceTests {
+    /// Mirrors the current persisted cache shape so tests can inspect and seed local data directly.
     private struct CacheV2: Codable {
         let version: Int
         let rate: Double
@@ -58,6 +74,7 @@ final class FXServiceTests {
         let fetchedAt: Date
     }
 
+    /// Mirrors the older cache shape to prove upgrades still understand previously saved quotes.
     private struct LegacyCache: Codable {
         let rate: Double
         let date: Date
@@ -69,6 +86,7 @@ final class FXServiceTests {
     private let session: URLSession
     private let now = FXQuoteDate.date(from: "2026-07-15")!
 
+    /// Creates fresh local preferences and an ephemeral session wired to the fake transport for each suite instance.
     init() {
         defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -79,10 +97,12 @@ final class FXServiceTests {
         resetTransport()
     }
 
+    /// Removes the uniquely named preferences domain so test data never survives into another run.
     deinit {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    /// Protects TWD support, currency-code normalization, provider metadata, and the expected Frankfurter URL path.
     @Test("Frankfurter v2 supports TWD and validates the echoed pair")
     func v2TWDLiveQuote() async throws {
         installResponse(
@@ -98,6 +118,7 @@ final class FXServiceTests {
         #expect(FXURLProtocol.lastURL?.query == nil)
     }
 
+    /// Confirms a valid live quote is cached in the current versioned format with separate quote and fetch dates.
     @Test("Live quote writes a versioned date-only cache")
     func liveQuoteWritesV2Cache() async throws {
         installResponse(
@@ -113,6 +134,7 @@ final class FXServiceTests {
         #expect(cached.fetchedAt == now)
     }
 
+    /// Prevents mismatched currencies, non-positive rates, or malformed dates from entering bill calculations.
     @Test("Mismatched pair, invalid rate and malformed date are rejected")
     func rejectsMalformedLiveQuotes() async {
         let invalidResponses = [
@@ -128,6 +150,8 @@ final class FXServiceTests {
         }
     }
 
+    /// Ensures a valid market date is trusted even when timezone differences make it
+    /// appear one day ahead locally.
     @Test("Canonical provider date is preserved even when ahead of the local calendar")
     func providerDateMayLeadLocalCalendar() async throws {
         installResponse(
@@ -138,6 +162,7 @@ final class FXServiceTests {
         #expect(quote.rate == 0.19835)
     }
 
+    /// Defines the cache contract precisely: a seven-day-old quote is usable, but even a millisecond older is not.
     @Test("Fresh cache is accepted through the seven-day boundary, then expires")
     func cacheTTLBoundaries() async throws {
         let fetchedAt = now.addingTimeInterval(-FXService.cacheLifetime)
@@ -157,6 +182,7 @@ final class FXServiceTests {
         #expect(expired == nil)
     }
 
+    /// Rejects impossible future fetch times, which could otherwise make stale data appear fresh for too long.
     @Test("Future-dated cache metadata is rejected")
     func futureFetchedAtIsRejected() async throws {
         try seedV2Cache(
@@ -168,6 +194,7 @@ final class FXServiceTests {
         #expect(await makeService().rate(from: "USD", to: "JPY") == nil)
     }
 
+    /// Protects upgrades by accepting the old cache format when its value and age are still valid.
     @Test("Legacy cache payload decodes while still obeying TTL")
     func legacyCacheCompatibility() async throws {
         let legacyDate = try #require(FXQuoteDate.date(from: "2026-07-12"))
@@ -189,6 +216,7 @@ final class FXServiceTests {
         #expect(quote.fetchedAt == now.addingTimeInterval(-60))
     }
 
+    /// Confirms backward compatibility never bypasses the same seven-day safety limit used by the new cache.
     @Test("Stale legacy cache payload is rejected")
     func staleLegacyCacheIsRejected() async throws {
         let legacyDate = try #require(FXQuoteDate.date(from: "2026-07-01"))
@@ -206,6 +234,8 @@ final class FXServiceTests {
         #expect(await makeService().rate(from: "USD", to: "JPY") == nil)
     }
 
+    /// Models a cache expiring during a failed request and ensures the service checks
+    /// the later time before falling back.
     @Test("Cache fallback re-reads the clock after a failed live attempt")
     func fallbackUsesPostFailureTimeForTTL() async throws {
         try seedV2Cache(
@@ -225,6 +255,7 @@ final class FXServiceTests {
         #expect(FXURLProtocol.requestCount == 1)
     }
 
+    /// Ensures a user's valid manual rate takes priority, records a timezone-safe date, and can be completely removed.
     @Test("Manual override remains date-only and wins without network")
     func manualOverrideWins() async throws {
         let service = makeService()
@@ -242,6 +273,7 @@ final class FXServiceTests {
         #expect(defaults.object(forKey: "fx.override.quoteDate.USD.JPY") == nil)
     }
 
+    /// Confirms manual rates saved by an older app version are converted to the new date-only representation.
     @Test("Legacy manual override Date is converted to canonical UTC date")
     func legacyManualDateCompatibility() async throws {
         let legacyDate = try #require(FXQuoteDate.date(from: "2023-11-14"))
@@ -253,6 +285,7 @@ final class FXServiceTests {
         #expect(quote.date == legacyDate)
     }
 
+    /// Protects mixed-version users by preferring a later old-format write over an earlier new-format date left behind.
     @Test("New-old-new manual override prefers a newer legacy write date")
     func newerLegacyManualWriteWinsOverStaleQuoteDate() async throws {
         let initialNewDate = try #require(FXQuoteDate.date(from: "2026-07-10"))
@@ -281,6 +314,7 @@ final class FXServiceTests {
         #expect(FXURLProtocol.requestCount == 0)
     }
 
+    /// Confirms converting a currency to itself returns exactly 1 immediately without an unnecessary network step.
     @Test("Same known currency short-circuits without network")
     func sameCurrencyShortCircuits() async throws {
         installFailure()
@@ -291,6 +325,7 @@ final class FXServiceTests {
         #expect(FXURLProtocol.requestCount == 0)
     }
 
+    /// Ensures malformed free-text codes are rejected before they can alter storage or become part of a request URL.
     @Test("Invalid free-text currency codes never reach URLSession or defaults")
     func invalidCodesAreRejectedEarly() async {
         installFailure()
@@ -299,6 +334,7 @@ final class FXServiceTests {
         #expect(FXURLProtocol.requestCount == 0)
     }
 
+    /// Proves a market date remains the same in widely separated timezones instead of shifting a calendar day.
     @Test("Quote-date conversion is invariant to the process default timezone")
     func quoteDateIgnoresDefaultTimezone() {
         let original = NSTimeZone.default
@@ -311,6 +347,7 @@ final class FXServiceTests {
         }
     }
 
+    /// Guards the short network timeouts that prevent FX lookup from indefinitely blocking the post-recognition flow.
     @Test("Default live session has bounded timeouts")
     func defaultSessionHasTimeouts() {
         let configuration = FXService.makeDefaultSession().configuration
@@ -318,6 +355,7 @@ final class FXServiceTests {
         #expect(configuration.timeoutIntervalForResource == 15)
     }
 
+    /// Verifies demo-mode rates are repeatable, reciprocal, marked as mock data, and reject unsupported currencies.
     @Test("Mock FX derives deterministic cross-rates including TWD")
     func mockFXCrossRates() async throws {
         let service = MockFXService()
@@ -331,6 +369,51 @@ final class FXServiceTests {
         #expect(await service.rate(from: "ZZZ", to: "ZZZ") == nil)
     }
 
+    /// Protects the complete offline travel-currency list and the mathematical consistency of multi-step conversions.
+    @Test("Mock FX supports the required demo travel currencies with stable cross-rates")
+    func mockFXSupportsRequiredTravelCurrencies() async throws {
+        let service = MockFXService()
+        let expectedUSDQuotes: [String: Double] = [
+            "PHP": 58.5,
+            "INR": 86.5,
+            "IDR": 16_300,
+            "MYR": 4.45,
+            "NZD": 1.66,
+            "DKK": 6.86,
+            "NOK": 11,
+            "SEK": 10.5,
+            "PLN": 3.95,
+            "CZK": 23,
+            "TRY": 36,
+            "AED": 3.6725,
+            "SAR": 3.75,
+            "BRL": 5.80,
+            "ZAR": 18.5,
+        ]
+
+        for (currency, expectedRate) in expectedUSDQuotes {
+            let quote = try #require(await service.rate(from: "USD", to: currency))
+            #expect(quote.rate == expectedRate)
+            #expect(quote.source == .mock)
+            #expect(quote.quoteDate == MockFXService.fixedQuoteDate)
+            #expect(quote.rate.isFinite)
+            #expect(quote.rate > 0)
+        }
+
+        let jpyToPHP = try #require(await service.rate(from: "JPY", to: "PHP"))
+        #expect(jpyToPHP.rate == 0.365625)
+        #expect(jpyToPHP.source == .mock)
+        #expect(jpyToPHP.quoteDate == MockFXService.fixedQuoteDate)
+        #expect(jpyToPHP.rate.isFinite)
+        #expect(jpyToPHP.rate > 0)
+
+        let phpToINR = try #require(await service.rate(from: "PHP", to: "INR"))
+        let inrToNZD = try #require(await service.rate(from: "INR", to: "NZD"))
+        let phpToNZD = try #require(await service.rate(from: "PHP", to: "NZD"))
+        #expect(abs((phpToINR.rate * inrToNZD.rate) - phpToNZD.rate) < 0.000_000_000_001)
+    }
+
+    /// Builds an FXService from this test's isolated network, preferences, and fixed or supplied time.
     private func makeService(
         now currentTime: Date? = nil
     ) -> FXService {
@@ -342,6 +425,7 @@ final class FXServiceTests {
         )
     }
 
+    /// Programs the fake transport to return one HTTP response containing the supplied JSON.
     private func installResponse(_ json: String, statusCode: Int = 200) {
         resetTransport()
         FXURLProtocol.requestHandler = { request in
@@ -358,6 +442,8 @@ final class FXServiceTests {
         }
     }
 
+    /// Makes the fake transport behave as an offline connection so cache fallback can
+    /// be tested without real networking.
     private func installFailure() {
         resetTransport()
         FXURLProtocol.requestHandler = { _ in
@@ -365,12 +451,14 @@ final class FXServiceTests {
         }
     }
 
+    /// Clears all shared fake-network state so one assertion cannot influence the next test.
     private func resetTransport() {
         FXURLProtocol.requestHandler = nil
         FXURLProtocol.requestCount = 0
         FXURLProtocol.lastURL = nil
     }
 
+    /// Writes a current-format USD-to-JPY sample directly into the isolated preferences store.
     private func seedV2Cache(
         rate: Double,
         quoteDate: String,

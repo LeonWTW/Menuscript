@@ -1,3 +1,6 @@
+// Centralizes photo-count and request-size safety rules so every capture path
+// enforces the same provider-friendly limits.
+
 import Foundation
 
 /// Hard safety limits shared by every capture entry point. The provider also
@@ -12,6 +15,8 @@ enum CaptureLimits {
     private static let nonImageRequestAllowance = 128_000
     private static let perImageJSONAllowance = 128
 
+    /// Estimates the eventual JSON body by adding base64 expansion and small
+    /// fixed overheads, avoiding the cost of building an oversized request.
     static func estimatedSerializedRequestBytes(imageData: [Data]) -> Int {
         imageData.reduce(nonImageRequestAllowance) { total, data in
             let base64Length = ((data.count + 2) / 3) * 4
@@ -19,10 +24,12 @@ enum CaptureLimits {
         }
     }
 
+    /// Checks a previously calculated body estimate against the hard limit.
     static func isWithinRequestBudget(estimatedBytes: Int) -> Bool {
         estimatedBytes <= maxSerializedRequestBytes
     }
 
+    /// Convenience check that estimates an image collection and validates it.
     static func isWithinRequestBudget(imageData: [Data]) -> Bool {
         isWithinRequestBudget(estimatedBytes: estimatedSerializedRequestBytes(imageData: imageData))
     }

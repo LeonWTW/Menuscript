@@ -1,11 +1,16 @@
+// Freezes a completed bill, stores it as versioned JSON data, and safely reopens
+// that permanent record without recalculating it from later menu edits.
+
 import Foundation
 
 /// Immutable, versioned copy of the order and every value used to present the
 /// final bill. Completed sessions render this value instead of recomputing from
 /// mutable `MenuItem` / `MenuSession` fields.
 struct BillSnapshot: Codable, Equatable, Sendable {
+    /// Identifies the data shape understood by this app version before full decoding.
     static let currentVersion = 1
 
+    /// An immutable copy of one ordered dish included in the completed bill.
     struct Line: Codable, Equatable, Sendable {
         let originalName: String
         let translatedName: String
@@ -14,6 +19,7 @@ struct BillSnapshot: Codable, Equatable, Sendable {
         let quantity: Int
         let sortOrder: Int
 
+        /// Multiplies unit price by quantity, or stays unavailable when no price was recognized.
         var lineTotal: Decimal? {
             unitPrice.map { $0 * Decimal(quantity) }
         }
@@ -42,6 +48,8 @@ struct BillSnapshot: Codable, Equatable, Sendable {
     let hasUnpricedItems: Bool
     let completedAt: Date
 
+    /// Creates the permanent bill record from the session's currently selected
+    /// dishes. All totals are calculated now so later menu edits cannot rewrite history.
     static func capture(from session: MenuSession, completedAt: Date) throws -> BillSnapshot {
         let lines = session.items
             .filter { $0.quantity > 0 }
@@ -111,10 +119,12 @@ struct BillSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// Expected failures while creating or opening a completed-bill snapshot.
 enum BillSnapshotError: Error, LocalizedError, Equatable {
     case emptyOrder
     case unsupportedVersion(Int)
 
+    /// Gives each snapshot failure a message in the language selected inside the app.
     var errorDescription: String? {
         switch self {
         case .emptyOrder:
@@ -125,17 +135,22 @@ enum BillSnapshotError: Error, LocalizedError, Equatable {
     }
 }
 
+/// Encodes snapshots for SwiftData storage and rejects versions this app cannot understand.
 enum BillSnapshotCodec {
+    /// Reads only the version first so an unknown data shape is not mistaken for the current one.
     private struct VersionEnvelope: Decodable {
         let version: Int
     }
 
+    /// Serializes a snapshot as stable, sorted-key JSON for storage and repeatable tests.
     static func encode(_ snapshot: BillSnapshot) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(snapshot)
     }
 
+    /// Checks the stored version before decoding the complete snapshot, returning
+    /// a clear compatibility error instead of presenting potentially incorrect totals.
     static func decode(_ data: Data) throws -> BillSnapshot {
         let decoder = JSONDecoder()
         let envelope = try decoder.decode(VersionEnvelope.self, from: data)

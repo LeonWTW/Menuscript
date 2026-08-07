@@ -1,3 +1,6 @@
+// Persists a user's manual currency rate and its date in local preferences.
+// It shares key-building rules with FXService so Settings and conversion code stay compatible.
+
 import Foundation
 
 /// UserDefaults-backed manual-override writer with no URLSession dependency.
@@ -6,6 +9,7 @@ struct FXManualOverrideStore: @unchecked Sendable, FXManualOverrideStoring {
     private let defaults: UserDefaults
     private let clock: @Sendable () -> Date
 
+    /// Creates a local override store with injectable preferences and time for deterministic tests.
     init(
         defaults: UserDefaults = .standard,
         clock: @escaping @Sendable () -> Date = { Date() }
@@ -14,6 +18,8 @@ struct FXManualOverrideStore: @unchecked Sendable, FXManualOverrideStoring {
         self.clock = clock
     }
 
+    /// Stores a valid positive rate, or removes all related values when the rate is nil or invalid.
+    /// Currency codes are normalized first so equivalent user input always maps to the same preference keys.
     func setManualOverride(_ rate: Double?, from rawFrom: String, to rawTo: String) {
         guard let from = FXService.normalizedCurrencyCode(rawFrom),
               let to = FXService.normalizedCurrencyCode(rawTo) else {
@@ -26,7 +32,7 @@ struct FXManualOverrideStore: @unchecked Sendable, FXManualOverrideStoring {
             let now = clock()
             defaults.set(rate, forKey: key)
             // Retain the legacy Date during the compatibility window so an
-            // older build and the canonical date-only reader stay coherent.
+            // older build and the standard date-only reader stay coherent.
             defaults.set(now, forKey: dateKey)
             defaults.set(FXQuoteDate.string(from: now), forKey: quoteDateKey)
         } else {

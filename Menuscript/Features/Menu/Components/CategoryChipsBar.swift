@@ -1,6 +1,9 @@
+// Renders and scrolls the menu's category filter while treating nil as the
+// explicit “all categories” selection.
+
 import SwiftUI
 
-/// Horizontal category filter. The leading chip is always 全部 (all
+/// Horizontal category filter. The leading chip is always “All” (all
 /// categories, `selection == nil`); tapping the already-selected chip clears
 /// the filter back to nil. The selected chip scrolls into view on change.
 struct CategoryChipsBar: View {
@@ -12,6 +15,7 @@ struct CategoryChipsBar: View {
     private let allLabel = L10n.string("全部")
     private let allID = "__mt_category_all__"
 
+    /// Builds all filter chips and automatically centers the newly selected one.
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
@@ -35,6 +39,7 @@ struct CategoryChipsBar: View {
         }
     }
 
+    /// Creates one accessible filter button with shared sizing and selected state.
     private func chip(label: String, isSelected: Bool, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
@@ -52,6 +57,7 @@ struct CategoryChipsBar: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// Draws the selected accent or an unselected surface suited to light/dark mode.
     @ViewBuilder
     private func chipBackground(isSelected: Bool) -> some View {
         let shape = Capsule()

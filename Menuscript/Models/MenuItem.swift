@@ -1,6 +1,10 @@
+// Defines the persisted information for one recognized menu item, including
+// translation details, ordering choices, and its owning menu session.
+
 import Foundation
 import SwiftData
 
+/// A single dish recognized from menu photos and optionally selected for the bill.
 @Model
 final class MenuItem {
     var originalName: String
@@ -16,6 +20,8 @@ final class MenuItem {
     var sortOrder: Int
     var session: MenuSession?
 
+    /// Creates a menu item from recognition results while defaulting optional
+    /// details and the user's quantity to safe empty values.
     init(
         originalName: String,
         translatedName: String,

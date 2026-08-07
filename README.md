@@ -43,6 +43,18 @@ Sprint 3's expansion direction is **persistence**: a session that survives being
 
 **Where to look.** `Menuscript/Models/BillSnapshot.swift`, `Menuscript/Models/MenuSession.swift`, `Menuscript/Services/SessionStore.swift`, `Menuscript/Services/RuntimeServiceResolver.swift`, `Menuscript/Features/Menu/HistoryPhotoGalleryView.swift`. The design rationale is in [docs/architecture.md](docs/architecture.md); the hands-on evidence is in [docs/manual-verification.md](docs/manual-verification.md).
 
+## Sprint 4 — Demo-Mode Quality Hardening
+
+Sprint 4 completes the important capability promised by Demo Mode: turning it on is an **offline guarantee**, even when a saved session records that it was originally created in live mode. The work is recorded as three single-purpose commits on `sprint-4-quality`, based on `origin/main` commit `d5794d6`; the branch has not yet been merged into `main`.
+
+- **F1 — one runtime decision.** Demo Mode takes precedence over persisted session provenance for recognition, dish explanation, and bill FX. In the mock branch the app does not seek consent, read the API key, construct the live FX factory, or call Gemini/Frankfurter. A mock explanation fetched for a formerly live session is visible for that sheet only and cannot overwrite the session's persisted live explanation.
+- **F2 — responsive direct photo capture.** Camera and DEBUG/direct additions reserve their capped slots immediately, then prepare JPEGs away from the main actor in submission order. Stable slots preserve photo order; preparation failure blocks recognition rather than sending a partial batch. The DEBUG auto-demo path waits for preparation deterministically and honors cancellation.
+- **F3 — forgiving demo-language input.** The mock fixture selects English for exactly `en` or text containing `english`; every other target-language value deterministically uses its Traditional Chinese fixture projection without throwing.
+- **F4 — broader offline FX.** `MockFXService` now supports 15 additional USD quote currencies — PHP, INR, IDR, MYR, NZD, DKK, NOK, SEK, PLN, CZK, TRY, AED, SAR, BRL, and ZAR — and derives all supported cross-rates from one internally consistent table. Unsupported pairs say that Demo Mode has finite coverage instead of blaming the network. The bill receives its provider and mode as one resolved selection.
+- **F5/F6 — safer dependency seams.** `ExplainSheet` now requires explicit `UserDefaults`, and `MenuView` forwards its injected defaults and live-FX factory; previews supply defaults explicitly. Test/preview injection with a custom vision provider and no explicit FX provider defaults to `MockFXService`, while production resolution stays unchanged.
+
+The quality suite now exercises resolver precedence, explanation-cache provenance, capture ordering/failure behavior, mock-language fallback, deterministic FX cross-rates, mode-specific copy, production wiring, and hermetic test seams. The automated simulator result is **PASS**: `xcodegen generate` succeeded independently, then `xcodebuild test` on iPhone 17 Pro / iOS 26.3.1 reported `Passed` with 220/220 tests passed (245 device-dynamic runs; 0 failed, 0 skipped, 0 expected failures). The two focused direct-photo tests also passed in a 10-iteration repetition. Physical-device, airplane-mode, and live-key smoke checks are intentionally still pending; see [manual verification](docs/manual-verification.md#2026-08-02--sprint-4-quality-verification) for the exact checklist.
+
 ## Quickstart
 
 Prerequisites: Xcode 16+ (iOS 17+ deployment target), [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -66,6 +78,8 @@ xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
+The most recent Sprint 4 run above was performed after a standalone `xcodegen generate`; it passed 220 tests with no failures, skips, or expected failures. `git diff --check` was also clean for the Sprint 4 documentation update.
+
 ## Expected Behavior
 
 Running one full feature slice end to end, from a fresh launch:
@@ -80,7 +94,7 @@ Running one full feature slice end to end, from a fresh launch:
 
 **Food sensitivities (Settings).** Settings includes a **食物敏感 (food-sensitivity)** section where you can toggle any of eleven preset allergens — the US "Big 9" (peanut, tree nuts, milk, egg, fish, crustacean shellfish, soy, wheat, sesame) plus gluten and molluscs — and add free-text custom allergens. When any are set, they are passed into the recognition prompt so the vision model can flag dishes that, by typical recipe, may contain them. These flags are advisory only and, by design, apply only to menus recognized *after* the setting is changed — sessions already in History are not retroactively re-checked (each session records the allergen profile that was in effect when it was recognized, and the Menu shows a footnote making that "as recognized" scope explicit).
 
-**With the mock provider** (Settings → mock-provider toggle on, no API key required): recognition and FX conversion use fixed, deterministic providers. The full core Capture → Menu → Bill → History flow makes no network request. The dish photo-search button remains an explicit external web action: tapping it opens Google Images in `SFSafariViewController`.
+**With the mock provider** (Settings → mock-provider toggle on, no API key required): recognition and FX conversion use fixed, deterministic providers. Demo Mode wins over any live provenance recorded on an older session, so the full core Capture → Menu → Bill → History flow — including dish explanations and a Bill refresh — makes no network request and does not read the Gemini key. The dish photo-search button remains an explicit external web action: tapping it opens Google Images in `SFSafariViewController`.
 
 **With a real Gemini API key** (Settings → enter a key, mock-provider toggle off): Capture sends the selected menu images, target language, and any food-sensitivity preferences directly to Google's Gemini `generateContent` API. Dish-explanation requests send the selected dish text. The user-supplied API key authenticates those direct Google requests and may associate the data with the user's Google project. Menuscript has no proxy server. This path requires network access and a valid key. It has been exercised end to end in the simulator with a real key — one live run recognized 36 dishes from a photo of a handwritten Japanese izakaya menu, recorded in [docs/manual-verification.md](docs/manual-verification.md) — but never on physical hardware (see Intentionally Deferred Features below).
 

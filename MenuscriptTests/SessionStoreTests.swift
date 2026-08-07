@@ -1,15 +1,23 @@
+// Verifies that session updates and deletions are saved atomically: either the
+// intended persistence change succeeds completely or the original records remain.
+
 import Foundation
 import SwiftData
 import Testing
 @testable import Menuscript
 
+/// Protects menu history from partial database operations and confirms that
+/// persistence failures are converted into useful, localized app errors.
 @MainActor
 @Suite("SessionStore persistence operations")
 struct SessionStoreTests {
+    /// Predictable test-only failures injected at fetch or save boundaries so
+    /// rollback behavior can be exercised without breaking a real database.
     private enum InjectedFailure: Error, LocalizedError {
         case fetch
         case save
 
+        /// Gives each simulated failure stable text for checking the store's error mapping.
         var errorDescription: String? {
             switch self {
             case .fetch: "injected fetch failure"
@@ -18,6 +26,8 @@ struct SessionStoreTests {
         }
     }
 
+    /// Creates an isolated in-memory database with complete parent-and-item data,
+    /// making deletion and rollback results easy to count without touching user history.
     private func makeContext(sessionCount: Int = 2) throws -> ModelContext {
         let configuration = ModelConfiguration(
             schema: AppSchema.current,
@@ -52,6 +62,8 @@ struct SessionStoreTests {
         return context
     }
 
+    /// Ensures a refreshed exchange rate saves every piece of quote information
+    /// exactly once while preserving which recognition provider created the session.
     @Test("Updating an FX rate saves all quote fields without changing provider provenance")
     func updateFXRateSavesAllQuoteFields() throws {
         let context = try makeContext(sessionCount: 1)
@@ -98,6 +110,8 @@ struct SessionStoreTests {
         #expect(persisted.providerModeRaw == RuntimeMode.mock.rawValue)
     }
 
+    /// Simulates an exchange-rate save failure and verifies only the attempted
+    /// quote fields roll back; unrelated pending edits remain available to the user.
     @Test("A failed FX save restores only quote fields and preserves unrelated edits")
     func updateFXRateSaveFailureRestoresOnlyQuoteFields() throws {
         let context = try makeContext(sessionCount: 1)
@@ -174,6 +188,8 @@ struct SessionStoreTests {
         #expect(persisted.providerModeRaw == RuntimeMode.live.rawValue)
     }
 
+    /// Confirms deleting chosen history rows performs one save and leaves every
+    /// unselected session intact.
     @Test("Deleting selected sessions saves once and preserves unselected sessions")
     func deleteSelected() throws {
         let context = try makeContext(sessionCount: 3)
@@ -194,6 +210,8 @@ struct SessionStoreTests {
         #expect(remaining.count == 1)
     }
 
+    /// Simulates a failed selected-row deletion and verifies both the session and
+    /// its related menu item reappear, avoiding a partially deleted history entry.
     @Test("A failed selected delete rolls the context back")
     func deleteFailureRollsBack() throws {
         let context = try makeContext()
@@ -216,6 +234,8 @@ struct SessionStoreTests {
         #expect(remainingItems.count == 2)
     }
 
+    /// Ensures Delete All reports how many sessions were removed and also removes
+    /// their child dishes, leaving no hidden orphan records behind.
     @Test("Delete all reports its count and cascades related items")
     func deleteAll() throws {
         let context = try makeContext(sessionCount: 3)
@@ -227,6 +247,8 @@ struct SessionStoreTests {
         #expect(try context.fetch(FetchDescriptor<MenuItem>()).isEmpty)
     }
 
+    /// Simulates failure before Delete All can read the records and confirms no
+    /// persisted session is touched when the deletion set is unknown.
     @Test("A failed delete-all fetch leaves persisted sessions untouched")
     func deleteAllFetchFailure() throws {
         let context = try makeContext()
@@ -245,6 +267,8 @@ struct SessionStoreTests {
         #expect(try context.fetch(FetchDescriptor<MenuSession>()).count == 2)
     }
 
+    /// Simulates failure while saving Delete All and verifies every session and
+    /// related dish is restored so the operation behaves as all-or-nothing.
     @Test("A failed delete-all save restores every session and child item")
     func deleteAllSaveFailureRollsBack() throws {
         let context = try makeContext()
@@ -264,6 +288,8 @@ struct SessionStoreTests {
         #expect(try context.fetch(FetchDescriptor<MenuItem>()).count == 2)
     }
 
+    /// Guards the source-level localization contract for every persistence and
+    /// snapshot error branch, preventing untranslated technical messages in the UI.
     @Test("Persistence error descriptions route every branch through localization")
     func persistenceErrorsUseL10nContract() throws {
         let repoRoot = URL(fileURLWithPath: #filePath)

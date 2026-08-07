@@ -1,11 +1,16 @@
+// Verifies the SwiftData model graph can save, fetch, and cascade-delete menu sessions and items.
+// An in-memory store keeps the tests fast and prevents them from changing real app history.
+
 import Foundation
 import Testing
 import SwiftData
 @testable import Menuscript
 
 @Suite("ModelContainer")
+/// Exercises the core persistence relationships configured for MenuSession and MenuItem.
 struct ModelContainerTests {
 
+    /// Builds an isolated SwiftData container that disappears after each test.
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([MenuSession.self, MenuItem.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -13,6 +18,7 @@ struct ModelContainerTests {
     }
 
     @Test("Insert a session with two items and fetch them back")
+    /// Confirms a saved menu session retains both of its recognized dishes.
     func insertAndFetch() throws {
         let container = try makeInMemoryContainer()
         let context = ModelContext(container)
@@ -39,6 +45,7 @@ struct ModelContainerTests {
     }
 
     @Test("Deleting a session cascades to delete its items")
+    /// Confirms removing a menu also removes its child dishes instead of leaving orphaned records.
     func deleteCascades() throws {
         let container = try makeInMemoryContainer()
         let context = ModelContext(container)

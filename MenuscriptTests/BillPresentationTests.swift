@@ -1,17 +1,26 @@
+// Verifies that completed bills, menu cards, and follow-up actions always use
+// the frozen bill snapshot instead of later edits to the live menu session.
+
 import Foundation
 import SwiftData
 import Testing
 @testable import Menuscript
 
+/// Records the exact dish and languages sent to the explanation provider so
+/// tests can prove completed-order actions use the values the user finalized.
 private struct ActionExplainInvocation: Equatable, Sendable {
     let original: String
     let detectedLanguage: String
     let targetLanguage: String
 }
 
+/// A test-only vision provider that records explanation requests without using
+/// the network. The actor keeps overlapping asynchronous calls from corrupting the record.
 private actor ActionRecordingVisionProvider: MenuVisionProvider {
     private var storedInvocation: ActionExplainInvocation?
 
+    /// Fails immediately because these tests must never enter menu extraction;
+    /// doing so would reveal that the action was routed through the wrong path.
     func extractMenu(
         images: [Data],
         targetLanguage: String,
@@ -20,6 +29,7 @@ private actor ActionRecordingVisionProvider: MenuVisionProvider {
         fatalError("Action-context tests never extract a menu")
     }
 
+    /// Captures the explanation request and returns a predictable result for assertions.
     func explainDish(
         original: String,
         language: String,
@@ -33,20 +43,31 @@ private actor ActionRecordingVisionProvider: MenuVisionProvider {
         return "Frozen explanation"
     }
 
+    /// Returns the recorded request so the test can compare every input value.
     func invocation() -> ActionExplainInvocation? {
         storedInvocation
     }
 }
 
+/// A credential-free secret store proving mock explanation actions work without
+/// supplying or saving a real API key.
 private struct ActionContextSecretStore: SecretStore {
+    /// Behaves as though no secret has ever been saved.
     func read(_ key: String) throws -> String? { nil }
+
+    /// Accepts writes as a no-op because credential persistence is outside these tests.
     func set(_ value: String, forKey key: String) throws {}
+
+    /// Accepts deletion as a no-op because the store contains no credentials.
     func delete(_ key: String) throws {}
 }
 
+/// Protects the read-only presentation contract for finalized bills and their actions.
 @MainActor
 @Suite("Snapshot-backed bill presentation")
 struct BillPresentationTests {
+    /// Creates a fresh in-memory database so each test is isolated and cannot
+    /// read or change a person's real saved menus.
     private func makeContext() throws -> ModelContext {
         let configuration = ModelConfiguration(
             schema: AppSchema.current,
@@ -59,6 +80,8 @@ struct BillPresentationTests {
         return ModelContext(container)
     }
 
+    /// Creates an isolated preference domain with a chosen provider mode and
+    /// returns its name so the caller can remove it after the test.
     private func makeDefaults(useMock: Bool) throws -> (UserDefaults, String) {
         let suiteName = "BillPresentationTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -67,6 +90,8 @@ struct BillPresentationTests {
         return (defaults, suiteName)
     }
 
+    /// Builds a representative editable order with one selected dish and optional
+    /// exchange-rate/provider details shared by presentation scenarios.
     private func makeOrder(
         fxRate: Double? = nil,
         providerMode: RuntimeMode? = nil
@@ -98,6 +123,8 @@ struct BillPresentationTests {
         return session
     }
 
+    /// Marks a session completed with explicitly supplied snapshot bytes, allowing
+    /// presentation rules to be tested independently of the persistence workflow.
     private func complete(
         _ session: MenuSession,
         snapshot: BillSnapshot
@@ -106,6 +133,8 @@ struct BillPresentationTests {
         session.lifecycleStatusRaw = "completed"
     }
 
+    /// Ensures drafts stay editable while missing, damaged, or future-version
+    /// completed bills show an unavailable state rather than possibly wrong totals.
     @Test("Completed state distinguishes valid, missing, unreadable, and unsupported snapshots")
     func completedStateClassification() throws {
         let draft = makeOrder()
@@ -146,6 +175,8 @@ struct BillPresentationTests {
         #expect(MenuPresentationState.resolve(for: unsupported).orderPresentation == nil)
     }
 
+    /// Protects the receipt the user finalized: later live edits must not change
+    /// its prices, quantities, exchange rate, totals, or selected-item cards.
     @Test("Completed optional FX and selected order cards never fall through to mutable values")
     func completedPresentationIsStrictlySnapshotBacked() throws {
         let session = makeOrder(fxRate: nil, providerMode: .mock)
@@ -214,6 +245,8 @@ struct BillPresentationTests {
         #expect(unselectedCard.isInCompletedOrder == false)
     }
 
+    /// Ensures photo search and dish explanations use the finalized dish name and
+    /// provider mode, even if the editable SwiftData objects later change.
     @Test("Completed card actions use frozen names and snapshot provider mode")
     func completedActionContextIsStrictlySnapshotBacked() async throws {
         let modelContext = try makeContext()
@@ -278,6 +311,8 @@ struct BillPresentationTests {
         ))
     }
 
+    /// Preserves the meaning of a legacy snapshot with no provider mode: the app
+    /// may use the current preference, but must not copy a later session mutation.
     @Test("Completed snapshot nil provider mode follows legacy preference, not mutated session")
     func completedActionContextPreservesMeaningfulNilMode() async throws {
         let modelContext = try makeContext()
@@ -330,6 +365,8 @@ struct BillPresentationTests {
         #expect(await provider.invocation()?.original == "凍結原名")
     }
 
+    /// Keeps existing version-one bills readable when they predate optional
+    /// exchange-rate and provider metadata added by later app updates.
     @Test("Version-one JSON still decodes when optional FX and provider metadata are absent")
     func oldVersionOneJSONDecodesWithoutOptionalMetadata() throws {
         #expect(BillSnapshot.currentVersion == 1)

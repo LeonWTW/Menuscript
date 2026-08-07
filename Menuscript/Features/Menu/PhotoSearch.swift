@@ -1,3 +1,6 @@
+// Builds safe external image-search links from recognized dish names without
+// coupling URL construction to the browser or SwiftUI presentation layer.
+
 import Foundation
 
 /// Builds a Google Images search URL for a dish so the user can see roughly what

@@ -1,3 +1,7 @@
+// Builds Gemini menu-reading requests, validates responses, and converts provider failures into safe app errors.
+// Request construction and response parsing are separate from transport so the
+// important logic can be tested without networking.
+
 import Foundation
 
 /// Gemini implementation of `MenuVisionProvider`.
@@ -6,13 +10,17 @@ import Foundation
 /// `buildExtractRequest` / `parseExtractResponse` and `buildExplainRequest` / `parseExplainResponse`.
 /// The API key travels ONLY in the `x-goog-api-key` header — never in the URL, never logged.
 struct GeminiProvider: MenuVisionProvider {
+    /// Sets the app's final serialized request limit after photos expand through JSON and base64 encoding.
     static let maximumRequestBodyBytes = 18_000_000
+    /// Caps the portion of an error body sent to the JSON decoder so unexpected responses receive bounded processing.
     private static let maximumErrorEnvelopeBytes = 64_000
 
     private let apiKey: @Sendable () -> String?
     private let model: String
     private let session: URLSession
 
+    /// Creates a provider with a lazily supplied key, configurable model, and injectable network session.
+    /// Resolving the key only when building a request keeps secret access out of offline composition paths.
     init(
         apiKey: @escaping @Sendable () -> String?,
         model: String = "gemini-2.5-flash",
@@ -27,6 +35,9 @@ struct GeminiProvider: MenuVisionProvider {
 
     // MARK: - MenuVisionProvider
 
+    /// Sends all menu photos for one structured extraction and retries once when Gemini returns malformed JSON.
+    /// The retry includes the parse problem and the same allergen rules, so correction
+    /// cannot silently change the request.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         let request = try buildExtractRequest(images: images, targetLanguage: targetLanguage, allergens: allergens)
         let data = try await send(request)
@@ -48,6 +59,7 @@ struct GeminiProvider: MenuVisionProvider {
         }
     }
 
+    /// Requests and parses a short plain-language explanation for one recognized dish.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         let request = try buildExplainRequest(original: original, language: language, targetLanguage: targetLanguage)
         let data = try await send(request)
@@ -113,6 +125,7 @@ struct GeminiProvider: MenuVisionProvider {
         return try makeRequest(body: body, key: key)
     }
 
+    /// Resolves and trims the API key immediately before use, treating nil and whitespace-only values identically.
     private func requireAPIKey() throws -> String {
         guard let rawKey = apiKey() else {
             throw VisionProviderError.missingAPIKey
@@ -122,6 +135,7 @@ struct GeminiProvider: MenuVisionProvider {
         return key
     }
 
+    /// Serializes a Gemini POST request, placing the secret only in its dedicated header and enforcing the body limit.
     private func makeRequest(body: [String: Any], key: String) throws -> URLRequest {
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent") else {
             throw VisionProviderError.network(L10n.string("無效嘅 API endpoint（model: %@）", model))
@@ -139,7 +153,7 @@ struct GeminiProvider: MenuVisionProvider {
 
     /// Applies the transport limit to the final serialized bytes, after JSON
     /// and base64 overhead have been added. Kept internal as a cheap boundary
-    /// seam so tests do not need to construct multi-megabyte image fixtures.
+    /// helper so tests do not need to construct multi-megabyte sample images.
     static func validateSerializedRequestBody(_ bodyData: Data) throws -> Data {
         guard bodyData.count <= Self.maximumRequestBodyBytes else {
             throw VisionProviderError.payloadTooLarge
@@ -290,7 +304,7 @@ struct GeminiProvider: MenuVisionProvider {
                 if let parsed = wirePriceDecimal(rawPrice) {
                     price = parsed
                 } else if priceNote == nil {
-                    // Model put non-numeric text (e.g. "時価", "600〜") into price: keep it as a note.
+                    // The model put text such as "market price" or a price range in `price`; keep it as a note.
                     priceNote = rawPrice
                 }
             }
@@ -324,9 +338,13 @@ struct GeminiProvider: MenuVisionProvider {
 
     // MARK: - Parsing internals
 
+    /// Minimal outer response shape needed to collect Gemini's generated text and finish reason.
     private struct GeminiEnvelope: Decodable {
+        /// One possible model response; the provider intentionally uses the first candidate.
         struct Candidate: Decodable {
+            /// Groups the text parts returned for a candidate.
             struct Content: Decodable {
+                /// A generated response fragment; non-text fragments decode with a nil value.
                 struct Part: Decodable { var text: String? }
                 var parts: [Part]?
             }
@@ -339,6 +357,7 @@ struct GeminiProvider: MenuVisionProvider {
     /// Wire form of the inner menu JSON. Tolerant on purpose: unknown keys are ignored,
     /// `lowConfidence`/`category` may be missing, and `price` may arrive as string or number.
     private struct WireMenu: Decodable {
+        /// The model-facing version of an item, with optional fields tolerated for defensive parsing.
         struct WireItem: Decodable {
             var original: String
             var translated: String
@@ -358,6 +377,8 @@ struct GeminiProvider: MenuVisionProvider {
     /// Accepts a JSON string or number, preserving its textual form for exact Decimal parsing.
     private struct StringOrNumber: Decodable {
         var raw: String
+
+        /// Decodes either representation into text so later Decimal parsing follows one strict path.
         init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             if let string = try? container.decode(String.self) {
@@ -373,6 +394,8 @@ struct GeminiProvider: MenuVisionProvider {
         }
     }
 
+    /// Decodes Gemini's outer envelope and joins all text fragments from its first candidate.
+    /// Missing text becomes a meaningful decode failure that includes the provider's finish reason when available.
     private static func innerText(from data: Data) throws -> String {
         let envelope: GeminiEnvelope
         do {
@@ -403,8 +426,8 @@ struct GeminiProvider: MenuVisionProvider {
     }
 
     /// Strict wire-price parse: plain decimal number only (commas stripped).
-    /// Anything else (ranges, 時価, units) returns nil so it lands in `priceNote` instead —
-    /// `Decimal(string:)` alone would silently accept "600〜" as 600.
+    /// Anything else (ranges, market-price text, or units) returns nil so it lands in `priceNote` instead.
+    /// `Decimal(string:)` alone could silently accept a range beginning with 600 as the exact value 600.
     private static func wirePriceDecimal(_ raw: String) -> Decimal? {
         let cleaned = raw.replacingOccurrences(of: ",", with: "")
         guard cleaned.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else {
@@ -413,6 +436,7 @@ struct GeminiProvider: MenuVisionProvider {
         return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
     }
 
+    /// Trims optional model text and turns blank strings into nil so the UI never displays empty metadata.
     private static func normalized(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
@@ -440,6 +464,7 @@ struct GeminiProvider: MenuVisionProvider {
         guard let decodingError = error as? DecodingError else {
             return "unexpected decoding error"
         }
+        /// Converts a nested JSON coding path into a short readable location.
         func path(_ codingPath: [CodingKey]) -> String {
             codingPath.isEmpty ? "root" : codingPath.map(\.stringValue).joined(separator: ".")
         }
@@ -459,8 +484,11 @@ struct GeminiProvider: MenuVisionProvider {
 
     // MARK: - Transport
 
+    /// Bounded subset of Google's error JSON used only to classify failures without retaining provider text.
     private struct GoogleErrorEnvelope: Decodable {
+        /// The server's status category and optional structured reasons.
         struct Payload: Decodable {
+            /// One machine-readable reason supplied in Google's detail list.
             struct Detail: Decodable {
                 let reason: String?
             }
@@ -474,6 +502,8 @@ struct GeminiProvider: MenuVisionProvider {
         let error: Payload?
     }
 
+    /// Executes one request, returning successful bytes and translating transport or
+    /// HTTP failures into safe error categories.
     private func send(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
@@ -608,6 +638,8 @@ struct GeminiProvider: MenuVisionProvider {
         return .http(statusCode)
     }
 
+    /// Reads `Retry-After` as either non-negative seconds or an HTTP date and converts it to a delay.
+    /// Invalid values return nil so callers never wait based on malformed server input.
     private static func parsedRetryAfter(
         _ header: String?,
         now: Date

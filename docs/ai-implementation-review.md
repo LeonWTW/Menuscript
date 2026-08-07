@@ -175,3 +175,40 @@ Executing the plan reviewed the plan, and it reviewed the app. Three findings ma
 I did not accept the executing agent's report as evidence. A separate pass re-derived the checkable claims independently: the reported Frankfurter JPY/TWD rate was re-requested and matched exactly; the screenshots for the read-only completed bill (no steppers, no surcharge control, no rate refresh) and for the rejected expired cache were re-read rather than taken on trust; the screenshot count and a clean `git status` were confirmed. One reported detail did **not** reproduce — an invalid-currency request that the agent recorded as HTTP 422 returned a transient 522 on re-check — and it is recorded as unconfirmed in the verification doc instead of being tidied away.
 
 Automated evidence after the `L10n` fix: `xcodebuild test` on iPhone 17 / iOS 26.3.1 — **211 tests passed, 0 failed, 0 skipped**, exit 0 (`41df014`). Still outstanding and stated as such: cases 1–2, physical-device verification, and Dynamic Type at AX3+.
+
+## 2026-08-02 — Sprint 4: Demo-Mode Offline Guarantee and Quality Seams
+
+Sprint 4 completes a capability, rather than adding an unrelated screen: the Demo Mode promise is now an enforceable runtime guarantee. When the toggle is on, a persisted live session cannot route recognition, dish explanation, or bill FX to a real provider. The work is recorded as three single-purpose commits on `sprint-4-quality`, based on `origin/main` `d5794d6`; the branch has not yet been merged into `main`.
+
+### AI implementation assistance and test generation
+
+I asked a Sol/max brain to write the acceptance contract before implementation, then used two independent Terra/xhigh implementation streams in a RED → GREEN loop. Their scoped work produced and extended focused tests for resolver precedence, runtime wiring, explanation-cache provenance, direct-photo preparation/order/failure behavior, mock-language fallback, mock-FX cross-rates, bill error copy, and injected-service behavior. I reviewed the generated assertions against the production seams rather than treating test quantity as proof.
+
+The accepted implementation work is deliberately narrow:
+
+- Demo Mode now wins over persisted live provenance. The mock branch avoids consent, key access, live provider creation, and live FX factory evaluation; a result fetched under Demo Mode for a live session is transient rather than overwriting that session's persisted explanation.
+- Direct camera/DEBUG additions reserve and cap slots synchronously, then execute the `@Sendable` JPEG preparer off the main actor through a serial batch task. Stable reservations preserve order and preparation failures block recognition. DEBUG auto-demo waits for pending photos and exits if cancelled.
+- The mock language classifier is non-throwing: exact `en` or a string containing `english` selects English; every other input selects the deterministic Traditional Chinese fixture.
+- `MockFXService` gained PHP, INR, IDR, MYR, NZD, DKK, NOK, SEK, PLN, CZK, TRY, AED, SAR, BRL, and ZAR as USD quotes and derives cross-rates from the one table. A Bill receives resolved provider and mode together, so an unsupported mock pair gets Demo-Mode-specific copy.
+- `ExplainSheet.defaults` is now a required initializer argument. `MenuView` forwards its injected defaults and live-FX factory, while the preview supplies defaults explicitly. A custom injected vision provider without an explicit FX provider receives `MockFXService`; an explicit FX provider wins and the ordinary production resolver is unchanged.
+
+### AI-assisted review and revisions
+
+The first full suite passed, but I then had a separate Sol/max specification review inspect the behavior rather than accepting green output as closure. It found four defects, all fixed before this record:
+
+1. **Explanation-cache provenance:** a Demo-Mode explanation could overwrite a cached explanation belonging to a recorded live session. The accepted fix keeps mismatched results transient and persists only provenance-compatible results.
+2. **Target-language classification:** the first generated classifier was too narrow. It was revised to recognize any string containing `english`, while the deterministic fallback remains Traditional Chinese.
+3. **Double live-FX factory evaluation:** the Bill sheet previously derived the provider and mode through separate access paths. It now resolves one `BillFXProviderSelection` and passes both values together.
+4. **Nondeterministic DEBUG wait:** the original review candidate relied on 1,000 `Task.yield()` calls. It was revised to wait on `pendingPhotoCount` with a cancellation check.
+
+A standards review found no blocker or high-severity issue. Its only note was low-severity duplication of a test-only asynchronous wait helper. After the four fixes, the final two-axis gate was clean: the Sol/max specification reviewer and the independent standards/correctness reviewer both reported no blocker, P1, or P2 finding; the focused `MockVisionProviderTests` and `RuntimeWiringTests` rerun also exited 0.
+
+### One generated test I rejected
+
+I rejected a proposed F5 SwiftUI wiring test that tried to prove the dependency injection by using `Mirror` reflection and source-string/grep checks. It was brittle: it would couple verification to private storage names and source formatting without exercising the production behavior. Instead, I accepted the compile-time guard created by making `ExplainSheet.defaults` required, supplemented it with the production service-wiring tests that exercise the resolver and passed factory/defaults seam, and left a concrete manual injected-defaults smoke checklist in `docs/manual-verification.md`. This gives a refactor-resistant boundary: a missed call site fails to compile, while runtime construction is verified at the supported service seam.
+
+### Verification after AI work
+
+I independently regenerated the ignored Xcode project with `xcodegen generate`, then ran the full suite on the iPhone 17 Pro simulator running iOS 26.3.1. The result was **Passed**: 220 total tests and 220 passed, with 245 device-dynamic runs; 0 failed, 0 skipped, and 0 expected failures. The two focused F2 direct-photo tests also passed under a 10-iteration repetition, and the focused FX suite passed 18/18 after its expected-rate table was expanded to assert all 15 added USD quotes exactly. Final `git diff --check` was clean.
+
+This is automated simulator evidence, not a substitute for hardware and network observation. The physical-device camera/UI, airplane-mode/no-key isolation, and live-key smoke cases for F1–F6 remain **Pending** and are enumerated exactly in `docs/manual-verification.md` (§ 2026-08-02). I have not represented them as passed.

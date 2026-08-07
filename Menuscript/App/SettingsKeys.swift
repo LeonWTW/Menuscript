@@ -1,5 +1,9 @@
+// Centralizes the keys and fallback rules used for small user preferences so
+// every screen reads and writes the same values consistently.
+
 import Foundation
 
+/// Names persisted settings and provides shared rules for resolving their defaults.
 enum SettingsKeys {
     static let targetLanguage = "settings.targetLanguage"     // String, default resolved by `defaultTargetLanguage(...)` (follows app UI language)
     static let homeCurrency = "settings.homeCurrency"         // String, default "USD"
@@ -9,15 +13,9 @@ enum SettingsKeys {
     static let allergenPresets = "settings.allergenPresets"   // String, comma-joined Allergen slugs, default ""
     static let allergenCustom = "settings.allergenCustom"     // String, free-text custom allergens, default ""
 
-    /// Default `targetLanguage` for a user who has never chosen one.
-    /// Follows the effective app UI language instead of always defaulting to
-    /// Traditional Chinese: an English UI — `appLanguage == .english`, or
-    /// `.system` where the system locale itself is English — defaults to
-    /// "English"; everything else defaults to "繁體中文".
-    ///
-    /// Only ever consulted as a fallback for an *unset* `targetLanguage`
-    /// default; once the user has explicitly picked a target language, that
-    /// stored value always wins and this function is never called for them.
+    /// Provides the initial translation language only when the user has not saved
+    /// a choice. An English app (or English device in system mode) starts with
+    /// English; every other case starts with Traditional Chinese.
     static func defaultTargetLanguage(
         appLanguage: AppLanguage = AppLanguage.resolve(),
         systemLocale: Locale = .current
@@ -34,12 +32,8 @@ enum SettingsKeys {
         return isEnglish ? "English" : "繁體中文"
     }
 
-    /// Reads a free-text setting, treating an empty or whitespace-only stored
-    /// value the same as an unset one. `TextField`s bound directly to
-    /// `@AppStorage` persist `""` when the user clears them, and plain
-    /// `defaults.string(forKey:) ?? fallbackValue` never catches that since
-    /// `??` only fires on `nil` — every such read site must go through here
-    /// instead so a cleared field falls back like a never-set one.
+    /// Returns trimmed saved text, or the fallback when it is missing or blank.
+    /// This makes a cleared setting behave like one that was never set.
     static func nonEmptyString(
         _ key: String,
         from defaults: UserDefaults = .standard,

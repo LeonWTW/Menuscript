@@ -1,3 +1,6 @@
+// Provides one reusable, bounded dish-quantity control with matching touch,
+// visual, feedback, and VoiceOver behavior.
+
 import SwiftUI
 
 /// Minus/count/plus stepper for a line item's quantity. Clamps to 0...99 and
@@ -9,6 +12,7 @@ struct QuantityStepper: View {
 
     private let bounds = 0...99
 
+    /// Combines both buttons and count into one adjustable accessibility element.
     var body: some View {
         HStack(spacing: 0) {
             minusButton
@@ -22,6 +26,7 @@ struct QuantityStepper: View {
         .accessibilityAdjustableAction(handleAdjustment)
     }
 
+    /// Decreases the quantity and visibly disables itself at the lower bound.
     private var minusButton: some View {
         Button(action: decrement) {
             Image(systemName: "minus")
@@ -38,6 +43,7 @@ struct QuantityStepper: View {
         .accessibilityLabel("減少數量")
     }
 
+    /// Increases the quantity while the underlying clamp protects the upper bound.
     private var plusButton: some View {
         Button(action: increment) {
             Image(systemName: "plus")
@@ -52,6 +58,7 @@ struct QuantityStepper: View {
         .accessibilityLabel("增加數量")
     }
 
+    /// Displays a stable-width, monospaced count to prevent layout movement.
     private var countText: some View {
         Text("\(value)")
             .font(Font.mtChip.monospacedDigit())
@@ -60,14 +67,17 @@ struct QuantityStepper: View {
             .multilineTextAlignment(.center)
     }
 
+    /// Adds one without allowing the quantity to exceed 99.
     private func increment() {
         value = min(bounds.upperBound, value + 1)
     }
 
+    /// Subtracts one without allowing a negative quantity.
     private func decrement() {
         value = max(bounds.lowerBound, value - 1)
     }
 
+    /// Maps VoiceOver swipe adjustments to the same bounded button logic.
     private func handleAdjustment(_ direction: AccessibilityAdjustmentDirection) {
         switch direction {
         case .increment:

@@ -1,7 +1,12 @@
+// Verifies how Gemini networking turns HTTP and connection failures into safe, actionable app errors.
+// A scripted URLProtocol replaces the internet so status codes, headers, malformed
+// bodies, and secret-leak attempts are predictable.
+
 import Foundation
 import Testing
 @testable import Menuscript
 
+/// A test-only URLSession interceptor that returns configurable responses while recording the outgoing request.
 private final class GeminiURLProtocol: URLProtocol {
     nonisolated(unsafe) static var statusCode = 200
     nonisolated(unsafe) static var headers: [String: String] = [:]
@@ -10,9 +15,12 @@ private final class GeminiURLProtocol: URLProtocol {
     nonisolated(unsafe) static var requestCount = 0
     nonisolated(unsafe) static var lastRequest: URLRequest?
 
+    /// Intercepts every request because the injected session exists only for this transport suite.
     override class func canInit(with request: URLRequest) -> Bool { true }
+    /// Preserves the original request so header and URL privacy assertions see the exact provider output.
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// Delivers the configured network error or HTTP response through URLSession's standard callback sequence.
     override func startLoading() {
         Self.requestCount += 1
         Self.lastRequest = request
@@ -35,20 +43,28 @@ private final class GeminiURLProtocol: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
 
+    /// Requires no cancellation cleanup because the fake completes immediately.
     override func stopLoading() {}
 }
 
+/// Embeds a secret in user-facing and debug descriptions to confirm transport errors
+/// remove sensitive values before leaving the service.
 private struct SecretBearingTransportError: LocalizedError, CustomStringConvertible {
     let secret: String
 
+    /// Simulates unsafe text that a third-party networking error might expose to the interface.
     var errorDescription: String? { "transport failed with API key \(secret)" }
+    /// Simulates unsafe diagnostic text that must also be discarded.
     var description: String { "debug transport error containing \(secret)" }
 }
 
+/// Regression coverage for Gemini's HTTP classification, retry timing, and credential-safe error handling.
+/// The suite is serialized because its URLProtocol fake is configured through shared static state.
 @Suite("Gemini transport", .serialized)
 final class GeminiTransportTests {
     private let session: URLSession
 
+    /// Creates an ephemeral session wired only to the fake transport and resets all scripted state.
     init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GeminiURLProtocol.self]
@@ -56,6 +72,8 @@ final class GeminiTransportTests {
         reset()
     }
 
+    /// Protects the status rules that drive distinct Settings, billing, permission,
+    /// retry, and payload guidance.
     @Test("Google error envelope maps to actionable typed failures")
     func statusMatrix() async throws {
         let cases: [(Int, String, [String: String], VisionProviderError)] = [
@@ -119,6 +137,8 @@ final class GeminiTransportTests {
         }
     }
 
+    /// Confirms rate limits preserve valid server wait times in both supported header
+    /// formats and remain safe when no wait time is supplied.
     @Test("Plain 429 preserves numeric and HTTP-date Retry-After when possible")
     func retryAfter() async throws {
         install(status: 429, body: Data(), headers: ["Retry-After": "30"])
@@ -137,6 +157,7 @@ final class GeminiTransportTests {
         #expect(httpDate == .rateLimitedWithRetryAfter(60))
     }
 
+    /// Ensures a trimmed key stays only in its header even when Google's returned message deliberately echoes it.
     @Test("API key is trimmed and cannot leak through URL or server error")
     func keyNeverLeaks() async throws {
         let secret = "sensitive-key-material"
@@ -158,6 +179,8 @@ final class GeminiTransportTests {
         #expect(request.url?.query == nil)
     }
 
+    /// Ensures a huge, unreadable error body gets limited parsing and cannot replace the
+    /// safe status-based message.
     @Test("Oversized or malformed error bodies stay bounded to status fallback")
     func malformedEnvelopeFallback() async throws {
         install(
@@ -167,6 +190,7 @@ final class GeminiTransportTests {
         #expect(try await requestError() == .invalidRequest)
     }
 
+    /// Confirms ordinary connection failures become a known network category without retaining credential text.
     @Test("URLSession failures map to typed network errors without key material")
     func networkFailure() async throws {
         reset()
@@ -180,6 +204,7 @@ final class GeminiTransportTests {
         #expect(error.errorDescription?.contains("network-secret") == false)
     }
 
+    /// Proves even a custom error that embeds the key in every description is replaced by fixed, secret-free wording.
     @Test("Arbitrary transport error text containing an API key is discarded")
     func customNetworkFailureCannotRetainSecret() async throws {
         let secret = "sentinel-api-key-must-not-survive"
@@ -197,6 +222,7 @@ final class GeminiTransportTests {
         #expect(String(describing: error).contains(secret) == false)
     }
 
+    /// Defines the small allowlist of connection messages that may safely reach UI and diagnostics.
     @Test("Known URL error codes map to fixed safe messages")
     func safeURLFailureMapping() {
         #expect(GeminiProvider.safeNetworkMessage(for: .notConnectedToInternet) == "offline")
@@ -208,6 +234,7 @@ final class GeminiTransportTests {
         #expect(GeminiProvider.safeNetworkMessage(for: nil) == "network request failed")
     }
 
+    /// Performs one expected-to-fail explanation request and returns the provider's typed error for concise assertions.
     private func requestError(key: String = "test-key") async throws -> VisionProviderError {
         let provider = GeminiProvider(
             apiKey: { key },
@@ -226,6 +253,7 @@ final class GeminiTransportTests {
         }
     }
 
+    /// Programs the fake transport with one status, body, and optional header set, clearing previous state first.
     private func install(
         status: Int,
         body: Data,
@@ -237,6 +265,7 @@ final class GeminiTransportTests {
         GeminiURLProtocol.headers = headers
     }
 
+    /// Restores neutral fake-network values so test cases cannot affect one another.
     private func reset() {
         GeminiURLProtocol.statusCode = 200
         GeminiURLProtocol.headers = [:]

@@ -1,3 +1,6 @@
+// Resolves currency rates from a manual preference, the Frankfurter API, or a recent local cache.
+// Validation and expiry checks keep malformed or stale financial data out of bill calculations.
+
 import Foundation
 
 /// Fetches currency conversion rates with a manual-override → live → fresh
@@ -7,6 +10,7 @@ import Foundation
 /// The class is immutable apart from thread-safe URLSession/UserDefaults
 /// dependencies. UserDefaults is not annotated Sendable, hence unchecked.
 final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideStoring {
+    /// The longest a downloaded quote may be reused when the live service is unavailable.
     static let cacheLifetime: TimeInterval = 7 * 24 * 60 * 60
 
     private let session: URLSession
@@ -14,6 +18,8 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
     private let clock: @Sendable () -> Date
     private let maxCacheAge: TimeInterval
 
+    /// Creates the rate service with injectable networking, preferences, time, and cache lifetime for testing.
+    /// Negative cache lifetimes are treated as zero so cached quotes can never become valid unexpectedly.
     init(
         session: URLSession = FXService.makeDefaultSession(),
         defaults: UserDefaults = .standard,
@@ -26,6 +32,7 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         self.maxCacheAge = max(0, maxCacheAge)
     }
 
+    /// Creates a short-lived, non-persistent network session for rate requests.
     /// FX sits immediately after a potentially paid Gemini request, so a
     /// blackholed rates host must not hold that flow indefinitely.
     static func makeDefaultSession() -> URLSession {
@@ -35,6 +42,8 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         return URLSession(configuration: configuration)
     }
 
+    /// Resolves a normalized currency pair using manual, live, then fresh-cache priority.
+    /// Matching currencies return 1 immediately, while cancellation stops before a cache fallback.
     func rate(from rawFrom: String, to rawTo: String) async -> FXRate? {
         guard let from = Self.normalizedCurrencyCode(rawFrom),
               let to = Self.normalizedCurrencyCode(rawTo) else {
@@ -100,11 +109,13 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         return cachedRate(forKey: cacheKey, now: clock())
     }
 
+    /// Delegates manual-rate persistence to the small settings-safe store that shares this service's dependencies.
     func setManualOverride(_ rate: Double?, from rawFrom: String, to rawTo: String) {
         FXManualOverrideStore(defaults: defaults, clock: clock)
             .setManualOverride(rate, from: rawFrom, to: rawTo)
     }
 
+    /// Downloads and strictly validates one Frankfurter quote before it can enter app state or the cache.
     private func fetchLive(
         from: String,
         to: String
@@ -132,6 +143,8 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         return (decoded.rate, decoded.date)
     }
 
+    /// Reads the current cache format first, then supports the older format during migration.
+    /// Both formats must pass the same value, date, and age checks before being returned.
     private func cachedRate(forKey key: String, now: Date) -> FXRate? {
         guard let data = defaults.data(forKey: key) else { return nil }
 
@@ -152,7 +165,7 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         }
 
         // Legacy payload written by the v1 client. Date is converted to a
-        // canonical UTC date-only value, while fetchedAt still enforces TTL.
+        // standard UTC date-only value, while fetchedAt still enforces cache expiry.
         if let legacy = try? JSONDecoder().decode(LegacyCachedPayload.self, from: data) {
             let quoteDate = FXQuoteDate.string(from: legacy.date)
             guard isUsableCachedRate(
@@ -174,6 +187,7 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         return nil
     }
 
+    /// Accepts only positive finite rates with real quote dates and non-future fetch times within the cache limit.
     private func isUsableCachedRate(
         rate: Double,
         quoteDate: String,
@@ -187,6 +201,7 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         return age >= 0 && age <= maxCacheAge
     }
 
+    /// Converts user or API input to an uppercase three-letter ISO-style code, rejecting every other shape.
     static func normalizedCurrencyCode(_ code: String) -> String? {
         let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard normalized.range(
@@ -225,23 +240,28 @@ final class FXService: @unchecked Sendable, FXRateProviding, FXManualOverrideSto
         }
     }
 
+    /// Builds the preference key for a manual conversion value.
     static func overrideKey(from: String, to: String) -> String {
         "fx.override.\(from).\(to)"
     }
 
+    /// Builds the legacy preference key for the exact time a manual value was saved.
     static func overrideDateKey(from: String, to: String) -> String {
         "fx.override.date.\(from).\(to)"
     }
 
+    /// Builds the preference key for a manual quote's timezone-safe market date.
     static func overrideQuoteDateKey(from: String, to: String) -> String {
         "fx.override.quoteDate.\(from).\(to)"
     }
 
+    /// Builds the private preference key for a downloaded quote payload.
     private static func cacheKey(from: String, to: String) -> String {
         "fx.cache.\(from).\(to)"
     }
 }
 
+/// The exact fields expected from Frankfurter's version-two rate endpoint.
 private struct FrankfurterV2Response: Decodable {
     let date: String
     let base: String
@@ -249,6 +269,7 @@ private struct FrankfurterV2Response: Decodable {
     let rate: Double
 }
 
+/// The current cached representation, separating market date from download time.
 private struct CachedPayloadV2: Codable {
     let version: Int
     let rate: Double
@@ -256,6 +277,7 @@ private struct CachedPayloadV2: Codable {
     let fetchedAt: Date
 }
 
+/// The previous cache representation retained only so existing installations can read old data safely.
 private struct LegacyCachedPayload: Codable {
     let rate: Double
     let date: Date

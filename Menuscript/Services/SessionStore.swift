@@ -1,3 +1,6 @@
+// Coordinates reliable SwiftData writes for completing, updating, and deleting saved menu sessions.
+// Each operation restores or isolates failed changes so the interface never claims that an unsaved mutation succeeded.
+
 import Foundation
 import SwiftData
 
@@ -7,13 +10,16 @@ import SwiftData
 /// saved.
 @MainActor
 struct SessionStore {
+    /// Injectable save operation used to reproduce persistence failures in tests.
     typealias SaveAction = @MainActor (ModelContext) throws -> Void
+    /// Injectable full-history fetch used to test delete-all failures without changing production queries.
     typealias FetchAllAction = @MainActor (ModelContext) throws -> [MenuSession]
 
     private let context: ModelContext
     private let saveAction: SaveAction
     private let fetchAllAction: FetchAllAction
 
+    /// Creates a store around the UI's model context, with replaceable persistence actions for deterministic tests.
     init(
         context: ModelContext,
         saveAction: @escaping SaveAction = { try $0.save() },
@@ -27,7 +33,7 @@ struct SessionStore {
     }
 
     /// Finalizes once. A second call returns the exact persisted snapshot and
-    /// performs no write, making repeated taps/retries idempotent.
+    /// performs no write, so repeated taps or retries keep the same completed result.
     func finalize(_ session: MenuSession, completedAt: Date = .now) throws -> BillSnapshot {
         if session.lifecycleStatus == .completed {
             guard let snapshot = session.billSnapshot else {
@@ -81,10 +87,12 @@ struct SessionStore {
         }
     }
 
+    /// Deletes one saved session through the same all-or-nothing path used for bulk deletion.
     func delete(_ session: MenuSession) throws {
         try delete([session])
     }
 
+    /// Deletes the requested sessions as one isolated persistence operation and leaves an empty request unchanged.
     func delete(_ sessions: [MenuSession]) throws {
         guard !sessions.isEmpty else { return }
         do {
@@ -94,6 +102,7 @@ struct SessionStore {
         }
     }
 
+    /// Fetches and deletes all sessions, returning the count only after the deletion is saved successfully.
     @discardableResult
     func deleteAll() throws -> Int {
         let sessions: [MenuSession]
@@ -131,6 +140,7 @@ struct SessionStore {
     }
 }
 
+/// Persistence failures grouped by the user operation that could not be completed.
 enum SessionStoreError: Error, LocalizedError, Equatable {
     case completedSessionMissingSnapshot
     case sessionsNotPersisted
@@ -139,6 +149,7 @@ enum SessionStoreError: Error, LocalizedError, Equatable {
     case fetchFailed(String)
     case deleteFailed(String)
 
+    /// Provides localized explanations that describe what was preserved and whether the user can retry.
     var errorDescription: String? {
         switch self {
         case .completedSessionMissingSnapshot:

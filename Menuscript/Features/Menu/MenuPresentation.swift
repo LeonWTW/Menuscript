@@ -1,5 +1,10 @@
+// Converts editable menu/session data and frozen bill snapshots into small,
+// read-only values that SwiftUI can render without mixing data sources.
+
 import Foundation
 
+/// Summarizes selected dishes for the cart bar, including whether any selected
+/// dish lacks a price and therefore cannot contribute to the subtotal.
 struct MenuCartTotals: Equatable, Sendable {
     let kinds: Int
     let count: Int
@@ -19,6 +24,8 @@ struct MenuOrderPresentation: Equatable, Sendable {
     let convertedSubtotal: Decimal?
     let cartTotals: MenuCartTotals
 
+    /// Builds editable menu values from the current session and calculates the
+    /// optional converted subtotal using the session's effective FX rate.
     static func draft(_ session: MenuSession) -> MenuOrderPresentation {
         let totals = MenuLogic.totals(items: session.items)
         let fxRate = session.effectiveFXRate
@@ -40,6 +47,8 @@ struct MenuOrderPresentation: Equatable, Sendable {
         )
     }
 
+    /// Recreates a completed order only from its immutable bill snapshot so
+    /// later edits or migration gaps cannot rewrite historical totals.
     static func completed(_ snapshot: BillSnapshot) -> MenuOrderPresentation {
         MenuOrderPresentation(
             isReadOnly: true,
@@ -58,10 +67,14 @@ struct MenuOrderPresentation: Equatable, Sendable {
     }
 }
 
+/// Represents either safe menu content or the reason completed history cannot
+/// be displayed, forcing callers to handle corrupt/missing snapshots explicitly.
 enum MenuPresentationState: Equatable, Sendable {
     case content(MenuOrderPresentation)
     case unavailable(SessionBillUnavailableReason)
 
+    /// Selects live or snapshot-backed presentation based on the session's
+    /// bill state and preserves unavailable history as an explicit state.
     static func resolve(for session: MenuSession) -> MenuPresentationState {
         switch session.billState {
         case .draft:
@@ -73,12 +86,16 @@ enum MenuPresentationState: Equatable, Sendable {
         }
     }
 
+    /// Returns renderable order values when available, otherwise nil for callers
+    /// that only need a convenient optional rather than a full state switch.
     var orderPresentation: MenuOrderPresentation? {
         guard case .content(let presentation) = self else { return nil }
         return presentation
     }
 }
 
+/// The price, names, and quantity shown by one card, separated from its mutable
+/// model so completed orders can display frozen snapshot values safely.
 struct MenuItemCardPresentation: Equatable, Sendable {
     let originalName: String
     let translatedName: String
@@ -90,6 +107,7 @@ struct MenuItemCardPresentation: Equatable, Sendable {
     /// live menu content that was not part of the completed order.
     let isInCompletedOrder: Bool?
 
+    /// Reflects the current mutable item for an active order.
     static func live(
         _ item: MenuItem,
         isQuantityReadOnly: Bool = false
@@ -105,6 +123,8 @@ struct MenuItemCardPresentation: Equatable, Sendable {
         )
     }
 
+    /// Uses the matching frozen line for a completed order; an unmatched item
+    /// remains descriptive menu content and is clearly marked as not ordered.
     static func completed(
         _ item: MenuItem,
         snapshot: BillSnapshot
@@ -146,11 +166,15 @@ struct MenuItemActionContext: Equatable, Sendable {
     /// current preferences instead of falling through to a mutable session.
     let providerMode: RuntimeMode?
 
+    /// Prefers the original dish name for image search and falls back to the
+    /// translation when recognition produced no usable original text.
     var photoSearchQuery: String {
         let trimmed = originalName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? translatedName : trimmed
     }
 
+    /// Captures action inputs from the same presentation shown on screen and
+    /// uses the provider mode saved in the snapshot when one exists.
     static func make(
         cardPresentation: MenuItemCardPresentation,
         lowConfidence: Bool,

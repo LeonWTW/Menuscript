@@ -27,3 +27,4 @@ CLAUDE.md
 
 # Misc local tooling artifacts
 .ruff_cache/
+*.bak*

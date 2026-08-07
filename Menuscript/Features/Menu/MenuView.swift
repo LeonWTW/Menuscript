@@ -1,11 +1,18 @@
+// Composes the category-filtered menu screen and routes card actions to focused
+// sheets while presentation helpers protect completed-order history.
+
 import Foundation
 import SwiftUI
 
+/// Bundles the FX provider with its runtime mode so Bill can both fetch rates
+/// and explain mode-specific failures accurately.
 struct BillFXProviderSelection: Sendable {
     let provider: any FXRateProviding
     let mode: RuntimeMode
 }
 
+/// Identifies one explanation sheet request and keeps the mutable item solely
+/// as the owner of its optional explanation cache.
 private struct MenuItemExplainSelection: Identifiable {
     let id = UUID()
     /// Mutable model ownership is limited to explanation cache persistence.
@@ -13,6 +20,8 @@ private struct MenuItemExplainSelection: Identifiable {
     let context: MenuItemActionContext
 }
 
+/// Identifies one photo-search sheet while preserving the exact card values
+/// that were visible when the user tapped it.
 private struct MenuItemPhotoSelection: Identifiable {
     let id = UUID()
     let context: MenuItemActionContext
@@ -37,6 +46,8 @@ struct MenuView: View {
     @State private var showBill = false
     @State private var showHistoryPhotos = false
 
+    /// Creates the production menu screen and defers creation of the live FX
+    /// service until Bill actually needs it.
     init(
         session: MenuSession,
         defaults: UserDefaults = .standard,
@@ -48,6 +59,8 @@ struct MenuView: View {
         self.onSessionCompleted = onSessionCompleted
     }
 
+    /// Creates a menu with a caller-supplied FX provider, keeping previews and
+    /// tests deterministic while exercising the same selection logic.
     init(
         session: MenuSession,
         liveFXProvider: any FXRateProviding,
@@ -60,6 +73,8 @@ struct MenuView: View {
         self.onSessionCompleted = onSessionCompleted
     }
 
+    /// Chooses mock or live FX behavior from the provider mode saved with the session
+    /// and current fallback preference, preserving historical mode intent.
     static func billFXSelection(
         for session: MenuSession,
         defaults: UserDefaults = .standard,
@@ -81,6 +96,7 @@ struct MenuView: View {
         )
     }
 
+    /// Resolves the provider used by the Bill sheet only when the sheet renders.
     private var billFXSelection: BillFXProviderSelection {
         Self.billFXSelection(
             for: session,
@@ -89,19 +105,24 @@ struct MenuView: View {
         )
     }
 
+    /// Derives ordered, duplicate-free filter choices from all session items.
     private var categories: [String] {
         MenuLogic.categories(items: session.items)
     }
 
+    /// Applies the selected category and the standard menu sort order.
     private var filteredItems: [MenuItem] {
         MenuLogic.filtered(items: session.items, category: selectedCategory)
     }
 
 
+    /// Provides a subtle separator with enough contrast for the active color scheme.
     private var hairlineColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.08)
     }
 
+    /// Assembles navigation, sheets, background, and optional demo routing around
+    /// the session content; calculations remain in presentation helpers.
     var body: some View {
         sessionContent
             .background { Color.mtBackground.ignoresSafeArea() }
@@ -127,10 +148,12 @@ struct MenuView: View {
                 photoSearchSheet(for: selection.context)
             }
             .sheet(isPresented: $showBill) {
+                let selection = billFXSelection
                 NavigationStack {
                     BillView(
                         session: session,
-                        fxProvider: billFXSelection.provider,
+                        fxProvider: selection.provider,
+                        fxProviderMode: selection.mode,
                         onCompleted: onSessionCompleted
                     )
                         .navigationTitle("帳單")
@@ -148,6 +171,8 @@ struct MenuView: View {
             #endif
     }
 
+    /// Shows safe menu content or an explicit explanation when a completed bill
+    /// snapshot cannot be read, rather than falling back to mutable data.
     @ViewBuilder
     private var sessionContent: some View {
         switch MenuPresentationState.resolve(for: session) {
@@ -162,6 +187,8 @@ struct MenuView: View {
         }
     }
 
+    /// Builds the filtered card list, allergen note, category bar, and cart bar
+    /// from one internally consistent order presentation.
     private func menuContent(_ presentation: MenuOrderPresentation) -> some View {
         ScrollView {
             if filteredItems.isEmpty {
@@ -237,6 +264,8 @@ struct MenuView: View {
         .animation(.default, value: presentation.cartTotals.count > 0)
     }
 
+    /// Explains that the current category contains no dishes without implying
+    /// the entire recognized menu is empty.
     private var emptyCategoryState: some View {
         VStack(spacing: 8) {
             Image(systemName: "fork.knife")
@@ -252,14 +281,20 @@ struct MenuView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Creates the explanation sheet with the tapped values and the model used
+    /// only to cache a successful explanation.
     private func explainSheet(for selection: MenuItemExplainSelection) -> some View {
         ExplainSheet(
             item: selection.cacheOwner,
             actionContext: selection.context,
+            defaults: defaults,
+            liveFXFactory: liveFXFactory,
             onDeleteAllSucceeded: onSessionCompleted
         )
     }
 
+    /// Opens an in-app image search when a valid URL can be constructed and
+    /// otherwise presents a clear fallback message.
     @ViewBuilder
     private func photoSearchSheet(for context: MenuItemActionContext) -> some View {
         if let url = PhotoSearch.imagesURL(query: context.photoSearchQuery) {
@@ -270,6 +305,8 @@ struct MenuView: View {
         }
     }
 
+    /// Reminds users that AI allergen matches are advisory whenever the session
+    /// was recognized with an allergen profile.
     private var allergenFootnote: some View {
         Text("敏感原警示根據辨識當時嘅設定，僅供參考，落單前請同餐廳確認。")
             .font(.footnote)

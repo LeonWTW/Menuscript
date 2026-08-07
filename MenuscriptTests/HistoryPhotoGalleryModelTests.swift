@@ -1,3 +1,6 @@
+// Verifies that saved menu photos are exposed to the history gallery safely and in capture order.
+// The model is tested separately from SwiftUI so corrupt image data cannot crash the screen.
+
 import Foundation
 import Testing
 import UIKit
@@ -5,7 +8,9 @@ import UIKit
 
 @MainActor
 @Suite("History photo gallery model")
+/// Covers empty, valid, ordered, and corrupt-photo states shown by the history gallery.
 struct HistoryPhotoGalleryModelTests {
+    /// Creates a tiny valid image in memory so tests do not depend on bundled or external files.
     private func validPNGData() throws -> Data {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2))
         let image = renderer.image { context in
@@ -16,6 +21,7 @@ struct HistoryPhotoGalleryModelTests {
     }
 
     @Test("Zero photos has no pages and no decodable image")
+    /// Confirms an empty session produces no gallery page and handles index requests safely.
     func zeroPhotos() {
         let model = HistoryPhotoGalleryModel(photos: [])
         #expect(model.isEmpty)
@@ -25,6 +31,7 @@ struct HistoryPhotoGalleryModelTests {
     }
 
     @Test("One photo decodes lazily at its only valid index")
+    /// Confirms one valid photo is available at index zero and nowhere else.
     func onePhoto() throws {
         let photo = try validPNGData()
         let model = HistoryPhotoGalleryModel(photos: [photo])
@@ -36,6 +43,7 @@ struct HistoryPhotoGalleryModelTests {
     }
 
     @Test("Six pages preserve capture order")
+    /// Confirms multiple photos stay in the same order in which the user captured them.
     func sixPhotosPreserveOrder() {
         let photos = (0..<6).map { Data([$0]) }
         let model = HistoryPhotoGalleryModel(photos: photos)
@@ -47,6 +55,7 @@ struct HistoryPhotoGalleryModelTests {
     }
 
     @Test("Corrupt bytes keep their page but produce a placeholder signal")
+    /// Confirms unreadable data remains represented as a page while image decoding fails safely.
     func corruptPhoto() {
         let corrupt = Data("not an image".utf8)
         let model = HistoryPhotoGalleryModel(photos: [corrupt])

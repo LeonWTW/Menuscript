@@ -1,9 +1,18 @@
+// Resolves, fetches, caches, and presents an AI explanation for one dish while
+// enforcing live-service consent and the provider mode saved with the session.
+
 import SwiftUI
 
+/// Stateless boundary for dish-explanation requests. Runtime resolution lives
+/// here so the view only manages presentation and recovery state.
 @MainActor
 enum DishExplanationService {
+    /// Resolves the requested runtime mode into services; injectable so tests
+    /// never need real credentials or network access.
     typealias RuntimeResolver = @MainActor (RuntimeMode) throws -> RuntimeServices?
 
+    /// Enforces disclosure, resolves the correct provider, and asks it to explain
+    /// the original dish name in the session's target language.
     static func fetch(
         original: String,
         detectedLanguage: String,
@@ -87,7 +96,7 @@ enum DishExplanationService {
 
     /// Action-context adapter used by `ExplainSheet`. Keeping the request
     /// inputs together prevents a completed card from reading mutable model
-    /// names or provider provenance after the user taps it.
+    /// names or the saved provider mode after the user taps it.
     static func fetchIfNeeded(
         currentExplanation: String?,
         forceRefresh: Bool,
@@ -112,11 +121,26 @@ enum DishExplanationService {
     }
 }
 
+/// Decides whether a fetched explanation can safely become part of a
+/// session's saved cache. Older sessions have no recorded provider mode,
+/// while recorded sessions only persist results produced by the same mode.
+enum DishExplanationCachePolicy {
+    /// Allows caching when the saved provider mode is unknown or matches the current mode;
+    /// mismatched demo/live output remains transient to protect session history.
+    static func shouldPersist(
+        persistedMode: RuntimeMode?,
+        effectiveMode: RuntimeMode
+    ) -> Bool {
+        guard let persistedMode else { return true }
+        return persistedMode == effectiveMode
+    }
+}
+
 /// Explains a single dish in the target language. Shows the cached
 /// `item.explanation` immediately when one already exists (no network call);
 /// otherwise resolves a `MenuVisionProvider` on appearance and fetches one.
-/// The toolbar's 重新生成 action always re-fetches and overwrites the cache,
-/// even when a cached explanation is already on screen.
+/// The toolbar's regenerate action always re-fetches. Results with incompatible
+/// current and saved provider modes do not match remain temporary instead of changing the cache.
 struct ExplainSheet: View {
     @Bindable private var item: MenuItem
 
@@ -128,6 +152,7 @@ struct ExplainSheet: View {
     @State private var showSettings = false
     @State private var disclosureIsRequired = false
     @State private var showDisclosure = false
+    @State private var transientExplanation: String?
 
     private let secretStore: any SecretStore
     private let defaults: UserDefaults
@@ -135,11 +160,13 @@ struct ExplainSheet: View {
     private let actionContext: MenuItemActionContext
     private let onDeleteAllSucceeded: () -> Void
 
+    /// Creates a sheet around one cache-owning model and an optional immutable
+    /// action context; production callers supply captured values for history safety.
     init(
         item: MenuItem,
         actionContext: MenuItemActionContext? = nil,
         secretStore: any SecretStore = KeychainStore(),
-        defaults: UserDefaults = .standard,
+        defaults: UserDefaults,
         liveFXFactory: @escaping RuntimeServiceResolver.LiveFXFactory = { FXService() },
         onDeleteAllSucceeded: @escaping () -> Void = {}
     ) {
@@ -151,10 +178,25 @@ struct ExplainSheet: View {
         self.onDeleteAllSucceeded = onDeleteAllSucceeded
     }
 
-    private var hasCachedExplanation: Bool {
-        !(item.explanation?.isEmpty ?? true)
+    /// Prefers a newly generated transient result, then the persisted model cache.
+    /// Empty strings are treated as absent so the loading/error UI stays meaningful.
+    private var displayedExplanation: String? {
+        if let transientExplanation, !transientExplanation.isEmpty {
+            return transientExplanation
+        }
+        if let explanation = item.explanation, !explanation.isEmpty {
+            return explanation
+        }
+        return nil
     }
 
+    /// Indicates whether any reusable explanation is already available.
+    private var hasCachedExplanation: Bool {
+        displayedExplanation != nil
+    }
+
+    /// Composes the dish header, loading/content/error state, regeneration action,
+    /// Settings route, and one-time live-service disclosure.
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -204,6 +246,7 @@ struct ExplainSheet: View {
 
     // MARK: - Header
 
+    /// Shows the translated name for comprehension and original name for reference.
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(actionContext.translatedName)
@@ -218,13 +261,14 @@ struct ExplainSheet: View {
 
     // MARK: - Body states
 
+    /// Selects exactly one body state so loading, errors, and content never overlap.
     @ViewBuilder
     private var explanationSection: some View {
         if isLoading {
             loadingState
         } else if let errorMessage {
             errorState(errorMessage)
-        } else if let explanation = item.explanation, !explanation.isEmpty {
+        } else if let explanation = displayedExplanation {
             loadedState(explanation)
         } else {
             // .task hasn't produced a result yet; avoid a blank flash.
@@ -232,6 +276,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Communicates that an AI explanation request is currently in progress.
     private var loadingState: some View {
         VStack(spacing: 12) {
             ProgressView()
@@ -243,6 +288,8 @@ struct ExplainSheet: View {
         .padding(.top, 32)
     }
 
+    /// Shows a successful explanation and adds a warning when recognition
+    /// confidence for the underlying dish was low.
     private func loadedState(_ explanation: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(explanation)
@@ -256,6 +303,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Shows the error text and the action most likely to resolve its cause.
     private func errorState(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(message)
@@ -272,6 +320,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Maps provider recovery guidance to a Settings route or direct retry.
     @ViewBuilder
     private func recoveryButton(for action: ProviderRecoveryAction) -> some View {
         switch action {
@@ -295,12 +344,14 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Displays a concise caution beside explanations of low-confidence dishes.
     private var lowConfidenceNote: some View {
         Label("辨識可能有誤，請對照原文", systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
             .foregroundStyle(Color.mtWarning)
     }
 
+    /// Forces a fresh explanation while preventing overlapping requests.
     private var regenerateButton: some View {
         Button {
             Task { await fetchExplanation(forceRefresh: true) }
@@ -313,6 +364,8 @@ struct ExplainSheet: View {
 
     // MARK: - Fetching
 
+    /// Reuses cache unless refresh is requested, then fetches and stores only
+    /// results from a compatible provider mode while turning failures into recovery UI.
     private func fetchExplanation(forceRefresh: Bool) async {
         guard forceRefresh || !hasCachedExplanation else { return }
 
@@ -323,6 +376,10 @@ struct ExplainSheet: View {
         defer { isLoading = false }
 
         do {
+            let effectiveMode = GeminiDisclosureGate.effectiveMode(
+                explicitMode: actionContext.providerMode,
+                defaults: defaults
+            )
             let result = try await DishExplanationService.fetchIfNeeded(
                 currentExplanation: item.explanation,
                 forceRefresh: forceRefresh,
@@ -332,7 +389,15 @@ struct ExplainSheet: View {
                 liveFXFactory: liveFXFactory
             )
             guard !Task.isCancelled else { return }
-            item.explanation = result
+            if DishExplanationCachePolicy.shouldPersist(
+                persistedMode: actionContext.providerMode,
+                effectiveMode: effectiveMode
+            ) {
+                item.explanation = result
+                transientExplanation = nil
+            } else {
+                transientExplanation = result
+            }
         } catch {
             guard !Task.isCancelled else { return }
             if error as? GeminiDisclosureError == .consentRequired {
@@ -364,6 +429,6 @@ struct ExplainSheet: View {
                 lowConfidence: true,
                 explanation: "「唐揚げ」係日式炸雞嘅一種，用生粉同醬油醃料炸至外脆內嫩，係居酒屋常見嘅下酒菜。",
                 sortOrder: 0
-            ))
+            ), defaults: .standard)
         }
 }

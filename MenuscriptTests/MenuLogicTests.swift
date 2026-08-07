@@ -1,10 +1,15 @@
+// Verifies the pure menu-list rules that group dishes, filter categories, and summarize an order.
+// Keeping these checks outside SwiftUI makes the user-visible behavior easy to reason about.
+
 import Foundation
 import Testing
 @testable import Menuscript
 
 @Suite("MenuLogic")
+/// Protects dish ordering, category selection, and cart totals including unpriced items.
 struct MenuLogicTests {
 
+    /// Creates a menu item with only the fields needed by a specific logic test.
     private func makeItem(
         originalName: String = "orig",
         translatedName: String = "translated",
@@ -24,6 +29,7 @@ struct MenuLogicTests {
     }
 
     @Test("Categories are returned in first-appearance order by sortOrder")
+    /// Confirms category chips follow the visual dish order and do not repeat labels.
     func categoriesFirstAppearanceOrder() {
         let items = [
             makeItem(category: "湯品", sortOrder: 2),
@@ -36,6 +42,7 @@ struct MenuLogicTests {
     }
 
     @Test("Filtered with nil category returns all items sorted by sortOrder")
+    /// Confirms clearing the category filter restores every dish in recognition order.
     func filteredNilReturnsAllSorted() {
         let items = [
             makeItem(originalName: "B", category: "主食", sortOrder: 1),
@@ -46,6 +53,7 @@ struct MenuLogicTests {
     }
 
     @Test("Filtered by category returns only matching items sorted by sortOrder")
+    /// Confirms selecting a category hides other dishes without changing dish order.
     func filteredByCategory() {
         let items = [
             makeItem(originalName: "B", category: "主食", sortOrder: 1),
@@ -57,6 +65,7 @@ struct MenuLogicTests {
     }
 
     @Test("Totals ignore qty-0 items but count unpriced ordered items in kinds/count, not subtotal")
+    /// Confirms cart counts include ordered market-price dishes while the numeric subtotal excludes unknown prices.
     func totalsIgnoresZeroQtyAndNilPrice() {
         let items = [
             makeItem(priceValue: Decimal(500), category: "燒烤", quantity: 2, sortOrder: 0),
@@ -72,6 +81,7 @@ struct MenuLogicTests {
     }
 
     @Test("An order made up entirely of unpriced items still surfaces a non-zero kind/count so the cart bar is not hidden")
+    /// Confirms an all-unpriced order still appears in the cart instead of looking empty.
     func totalsOfUnpricedOnlyOrderIsNotHidden() {
         let items = [
             makeItem(priceValue: nil, category: "飲品", quantity: 2, sortOrder: 0),
@@ -84,6 +94,7 @@ struct MenuLogicTests {
     }
 
     @Test("Totals of an empty list are all zero")
+    /// Confirms an empty menu selection produces zero counts and no unpriced warning.
     func totalsEmpty() {
         let result = MenuLogic.totals(items: [])
         #expect(result.kinds == 0)

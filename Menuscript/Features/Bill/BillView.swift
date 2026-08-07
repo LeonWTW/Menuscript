@@ -1,7 +1,23 @@
+// Presents bill lines, totals, currency status, even splitting, and completion
+// while delegating calculations and persistence to focused model helpers.
+
 import Foundation
 import SwiftUI
 
+/// Formats FX metadata and failure wording for display without mixing it into
+/// fetching or the SwiftUI layout.
 enum BillFXPresentation {
+    /// Returns the localized source key for an unavailable FX refresh. Demo
+    /// fixtures have finite coverage, while live mode failures may be network
+    /// related, so the two cases must not surface the same explanation.
+    static func unavailableMessageKey(for providerMode: RuntimeMode?) -> String {
+        providerMode == .mock
+            ? "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
+            : "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+    }
+
+    /// Uses a standard stored quote date when valid, otherwise converts the
+    /// legacy `Date`; this keeps old sessions readable during migration.
     static func quoteDate(
         quoteDate: String?,
         legacyDate: Date?
@@ -17,8 +33,11 @@ enum BillFXPresentation {
     }
 }
 
+/// Fetches a replacement rate only when a draft bill genuinely needs conversion.
 @MainActor
 enum BillFXRefresh {
+    /// Returns a fresh cross-currency quote for editable sessions, or nil when
+    /// refresh is unnecessary/unavailable; persistence remains the caller's job.
     static func fetch(
         for session: MenuSession,
         provider: any FXRateProviding
@@ -55,22 +74,28 @@ struct BillView: View {
     @State private var fxRefreshErrorMessage: String?
 
     private let fxProvider: any FXRateProviding
+    private let fxProviderMode: RuntimeMode
 
     private let surchargePresets: [Double] = [0, 8, 10]
     private let surchargeBounds: ClosedRange<Double> = 0...30
     private let peopleBounds: ClosedRange<Int> = 1...20
 
+    /// Creates the screen with an explicit FX provider and its mode so refresh
+    /// behavior is testable and failures can be described accurately.
     init(
         session: MenuSession,
         fxProvider: any FXRateProviding,
-        fxProviderMode: RuntimeMode? = nil,
+        fxProviderMode: RuntimeMode,
         onCompleted: @escaping () -> Void = {}
     ) {
         self.session = session
         self.fxProvider = fxProvider
+        self.fxProviderMode = fxProviderMode
         self.onCompleted = onCompleted
     }
 
+    /// Shows safe bill content or an explicit unavailable state, plus completion
+    /// and refresh alerts shared by all bill sections.
     var body: some View {
         Group {
             switch BillPresentationState.resolve(for: session) {
@@ -105,6 +130,7 @@ struct BillView: View {
         }
     }
 
+    /// Stacks the four bill sections inside one scrollable, consistently padded page.
     private func billContent(_ display: BillDisplayModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -119,6 +145,7 @@ struct BillView: View {
 
     // MARK: - Order lines
 
+    /// Lists selected order lines and warns when unpriced dishes are excluded from totals.
     private func orderLinesSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: MTSpacing.cardGap) {
             ForEach(display.lines) { line in
@@ -134,6 +161,7 @@ struct BillView: View {
         .background(sectionBackground)
     }
 
+    /// Shows one dish's quantity and calculated line total, or its market-price note.
     private func orderLineRow(
         _ line: BillDisplayLine,
         display: BillDisplayModel
@@ -161,6 +189,8 @@ struct BillView: View {
         .accessibilityLabel(orderLineAccessibilityLabel(line, display: display))
     }
 
+    /// Produces one complete spoken line, explicitly stating when an unpriced
+    /// dish has not contributed to the numeric total.
     private func orderLineAccessibilityLabel(
         _ line: BillDisplayLine,
         display: BillDisplayModel
@@ -182,6 +212,7 @@ struct BillView: View {
 
     // MARK: - Surcharge
 
+    /// Shows frozen surcharge data for completed bills and editable controls for drafts.
     private func surchargeSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("附加費／稅")
@@ -205,6 +236,7 @@ struct BillView: View {
         .background(sectionBackground)
     }
 
+    /// Reflows preset and custom surcharge controls vertically for large text.
     @ViewBuilder
     private var surchargeControls: some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -221,6 +253,7 @@ struct BillView: View {
         }
     }
 
+    /// Groups the common surcharge percentages into quick-selection controls.
     private var surchargePresetChips: some View {
         HStack(spacing: 8) {
             ForEach(surchargePresets, id: \.self) { preset in
@@ -229,6 +262,7 @@ struct BillView: View {
         }
     }
 
+    /// Creates one surcharge preset and marks it selected when it matches the session.
     private func surchargeChip(_ preset: Double) -> some View {
         let isSelected = session.surchargePercent == preset
         return Button {
@@ -248,6 +282,7 @@ struct BillView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// Draws selected and unselected preset surfaces consistently in both color schemes.
     @ViewBuilder
     private func surchargeChipBackground(isSelected: Bool) -> some View {
         let shape = Capsule()
@@ -262,6 +297,7 @@ struct BillView: View {
         }
     }
 
+    /// Allows any whole-number surcharge within the safe 0–30 percent range.
     private var customSurchargeStepper: some View {
         Stepper(value: $session.surchargePercent, in: surchargeBounds, step: 1) {
             Text("自訂 \(Int(session.surchargePercent))%")
@@ -274,6 +310,7 @@ struct BillView: View {
 
     // MARK: - Totals
 
+    /// Presents subtotal, surcharge, final total, and FX status from one display model.
     private func totalsSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             summaryRow(
@@ -312,6 +349,8 @@ struct BillView: View {
         }
     }
 
+    /// Explains the effective rate, source, and date, or tells the user why no
+    /// conversion is visible.
     private func fxStatusText(_ display: BillDisplayModel) -> String {
         guard let fxRate = display.fxRate else {
             return L10n.string(
@@ -341,6 +380,7 @@ struct BillView: View {
         return dateText.map { L10n.string("%@（%@）", rateDescription, $0) } ?? rateDescription
     }
 
+    /// Starts an FX refresh and replaces the icon with progress to block duplicate taps.
     private var refreshRateButton: some View {
         Button {
             Task { await refreshFXRate() }
@@ -361,6 +401,8 @@ struct BillView: View {
         .accessibilityLabel("更新匯率")
     }
 
+    /// Fetches and persists a new rate for an editable cross-currency bill,
+    /// translating provider and save failures into clear alert messages.
     private func refreshFXRate() async {
         guard !session.isCompleted,
               session.menuCurrency.uppercased() != session.homeCurrency.uppercased() else { return }
@@ -372,7 +414,7 @@ struct BillView: View {
             provider: fxProvider
         ) else {
             fxRefreshErrorMessage = L10n.string(
-                "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+                BillFXPresentation.unavailableMessageKey(for: fxProviderMode)
             )
             return
         }
@@ -385,6 +427,7 @@ struct BillView: View {
         }
     }
 
+    /// Bridges the optional FX error message to SwiftUI's Boolean alert API.
     private var fxRefreshErrorBinding: Binding<Bool> {
         Binding(
             get: { fxRefreshErrorMessage != nil },
@@ -392,6 +435,7 @@ struct BillView: View {
         )
     }
 
+    /// Renders one label/value line shared by subtotal and surcharge summaries.
     private func summaryRow(label: LocalizedStringKey, value: String) -> some View {
         HStack {
             Text(label)
@@ -404,6 +448,7 @@ struct BillView: View {
         }
     }
 
+    /// Makes the final total visually prominent and adapts its layout for large text.
     @ViewBuilder
     private func totalHero(_ display: BillDisplayModel) -> some View {
         Group {
@@ -424,6 +469,8 @@ struct BillView: View {
         .accessibilityLabel("總數 \(totalAccessibilityValue(display))")
     }
 
+    /// Leads with the converted total when present and retains the original-currency
+    /// total beneath it so the approximation is never mistaken for the bill amount.
     private func totalAmountStack(
         _ display: BillDisplayModel,
         alignment: HorizontalAlignment
@@ -444,6 +491,7 @@ struct BillView: View {
         }
     }
 
+    /// Produces the complete spoken total in converted and original currencies.
     private func totalAccessibilityValue(_ display: BillDisplayModel) -> String {
         if let convertedTotal = display.convertedTotal {
             let converted = CurrencyFormat.format(convertedTotal, code: display.homeCurrency)
@@ -455,6 +503,8 @@ struct BillView: View {
 
     // MARK: - AA (even split)
 
+    /// Groups people selection and rounded per-person totals with an explicit
+    /// explanation that upward rounding may create a small surplus.
     private func aaSection(_ display: BillDisplayModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("AA 埋單")
@@ -470,6 +520,7 @@ struct BillView: View {
         .background(sectionBackground)
     }
 
+    /// Shows a frozen people count for history or an adjustable control for drafts.
     private func peopleRow(_ display: BillDisplayModel) -> some View {
         HStack {
             Text("人數")
@@ -486,6 +537,7 @@ struct BillView: View {
         }
     }
 
+    /// Makes the per-person amount prominent and reflows it for accessibility text sizes.
     @ViewBuilder
     private func perPersonHero(_ display: BillDisplayModel) -> some View {
         Group {
@@ -506,6 +558,7 @@ struct BillView: View {
         .accessibilityLabel("每人應付 \(perPersonAccessibilityValue(display))")
     }
 
+    /// Leads with the converted split when available while retaining the original amount.
     private func perPersonAmountStack(
         _ display: BillDisplayModel,
         alignment: HorizontalAlignment
@@ -526,6 +579,7 @@ struct BillView: View {
         }
     }
 
+    /// Produces the complete spoken per-person amount in all available currencies.
     private func perPersonAccessibilityValue(_ display: BillDisplayModel) -> String {
         if let perPersonConverted = display.perPersonConverted {
             let converted = CurrencyFormat.format(perPersonConverted, code: display.homeCurrency)
@@ -535,6 +589,7 @@ struct BillView: View {
         return CurrencyFormat.format(display.perPersonOriginal, code: display.menuCurrency)
     }
 
+    /// Applies the shared visual treatment to major monetary labels.
     private func heroLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.mtDishName)
@@ -543,6 +598,7 @@ struct BillView: View {
 
     // MARK: - Completion
 
+    /// Bridges an optional finalization error to the Boolean alert presentation API.
     private var finalizeErrorBinding: Binding<Bool> {
         Binding(
             get: { finalizeErrorMessage != nil },
@@ -550,6 +606,8 @@ struct BillView: View {
         )
     }
 
+    /// Dismisses completed history immediately, or atomically finalizes a draft
+    /// before dismissing and notifying the parent screen.
     private func completeOrDismiss() {
         if session.isCompleted {
             dismiss()
@@ -569,6 +627,7 @@ struct BillView: View {
 
     // MARK: - Chrome
 
+    /// Draws a shared bill-section surface with scheme-appropriate edge separation.
     @ViewBuilder
     private var sectionBackground: some View {
         let shape = RoundedRectangle(cornerRadius: MTRadius.card, style: .continuous)
@@ -591,6 +650,7 @@ private struct PeopleCountStepper: View {
     @Binding var value: Int
     let bounds: ClosedRange<Int>
 
+    /// Combines both buttons and count into one VoiceOver-adjustable element.
     var body: some View {
         HStack(spacing: 0) {
             minusButton
@@ -604,6 +664,7 @@ private struct PeopleCountStepper: View {
         .accessibilityAdjustableAction(handleAdjustment)
     }
 
+    /// Decreases people count and disables itself at the configured minimum.
     private var minusButton: some View {
         Button(action: decrement) {
             Image(systemName: "minus")
@@ -620,6 +681,7 @@ private struct PeopleCountStepper: View {
         .accessibilityLabel("減少人數")
     }
 
+    /// Increases people count and disables itself at the configured maximum.
     private var plusButton: some View {
         Button(action: increment) {
             Image(systemName: "plus")
@@ -636,6 +698,7 @@ private struct PeopleCountStepper: View {
         .accessibilityLabel("增加人數")
     }
 
+    /// Shows a stable-width, monospaced people count between the controls.
     private var countText: some View {
         Text("\(value) 人")
             .font(Font.mtDishName.monospacedDigit())
@@ -644,14 +707,17 @@ private struct PeopleCountStepper: View {
             .multilineTextAlignment(.center)
     }
 
+    /// Adds one person without exceeding the supplied range.
     private func increment() {
         value = min(bounds.upperBound, value + 1)
     }
 
+    /// Removes one person without going below the supplied range.
     private func decrement() {
         value = max(bounds.lowerBound, value - 1)
     }
 
+    /// Maps VoiceOver swipe adjustments to the same bounded button logic.
     private func handleAdjustment(_ direction: AccessibilityAdjustmentDirection) {
         switch direction {
         case .increment:
