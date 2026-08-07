@@ -1,3 +1,6 @@
+// Coordinates asynchronous photo-library batches and prevents late results
+// from mutating a capture screen after that screen has gone away.
+
 import Foundation
 
 /// Owns every asynchronous photo-library import for one Capture screen.
@@ -5,11 +8,15 @@ import Foundation
 /// cancellation prevents a dismissed/replaced screen from accepting late data.
 @MainActor
 final class PhotoImportCoordinator {
+    /// Loads and prepares one selected photo without depending on PhotosUI,
+    /// which keeps batch behavior directly testable.
     typealias Loader = @Sendable () async -> Result<ImagePrep.PreparedPhoto, CapturedPhotoFailure>
 
     private var generation = UUID()
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
+    /// Reserves ordered slots, starts one cancellable batch, and resolves each
+    /// accepted loader into its matching ID while the generation is current.
     @discardableResult
     func importBatch(
         loaders: [Loader],
@@ -66,6 +73,8 @@ final class PhotoImportCoordinator {
 /// deterministic and directly testable.
 @MainActor
 enum CaptureImportLifecycle {
+    /// Cancels imports only when Capture truly leaves; child camera/settings
+    /// presentations temporarily hide the view but must preserve its work.
     static func handleDisappear(
         isPresentingCamera: Bool,
         isPresentingSettings: Bool,

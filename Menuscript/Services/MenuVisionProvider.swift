@@ -1,22 +1,40 @@
+// Defines the provider-independent menu result, error language, and recognition operations used by the app.
+// Both Gemini and offline demo providers conform to this boundary, keeping screens unaware of networking details.
+
 import Foundation
 
+/// A complete, provider-neutral menu produced from one or more photos.
 struct ExtractedMenu: Codable, Equatable, Sendable {
+    /// One recognized menu entry in both its original and reader-friendly forms.
     struct Item: Codable, Equatable, Sendable {
+        /// Text as it appeared on the photographed menu.
         var original: String
+        /// Text translated into the user's requested language.
         var translated: String
+        /// Numeric price when recognition can identify one safely.
         var price: Decimal?
+        /// Non-numeric pricing text such as “market price.”
         var priceNote: String?
+        /// Reader-friendly grouping such as mains or drinks.
         var category: String
+        /// Warns that the recognized details deserve a manual check.
         var lowConfidence: Bool
+        /// Optional short explanation of the dish.
         var summary: String? = nil
+        /// Requested allergens that may be present; this is guidance, not a safety guarantee.
         var possibleAllergens: [String] = []
     }
-    var detectedLanguage: String   // human-readable, e.g. "日文"
-    var menuCurrency: String       // ISO 4217, e.g. "JPY"
+    /// Human-readable source language, for example “Japanese.”
+    var detectedLanguage: String
+    /// Three-letter menu currency code, for example “JPY.”
+    var menuCurrency: String
+    /// Restaurant name when it can be read confidently.
     var restaurantName: String?
+    /// Recognized dishes in display order.
     var items: [Item]
 }
 
+/// Provider failures expressed as user-meaningful categories instead of raw HTTP or decoding errors.
 enum VisionProviderError: Error, LocalizedError, Equatable {
     case missingAPIKey
     case invalidAPIKey
@@ -49,12 +67,13 @@ enum VisionProviderError: Error, LocalizedError, Equatable {
         }
     }
 
-    /// Lets Wave 2 route only credential failures to Settings. Permission,
-    /// billing, model and network failures must not be presented as a bad key.
+    /// Returns true only when changing the saved key can fix the problem.
+    /// Permission, billing, model, and network failures need different guidance.
     var requiresAPIKeyUpdate: Bool {
         self == .missingAPIKey || self == .invalidAPIKey
     }
 
+    /// Provides a localized, non-technical explanation suitable for showing directly in the app.
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
@@ -106,7 +125,9 @@ enum ProviderRecoveryAction: Equatable, Sendable {
     case retry
 }
 
+/// Adds presentation-friendly recovery guidance without mixing UI decisions into networking code.
 extension VisionProviderError {
+    /// Maps an error category to a useful next step without making views inspect localized message text.
     var recoveryAction: ProviderRecoveryAction? {
         switch self {
         case .missingAPIKey, .invalidAPIKey, .unsupportedTargetLanguage:
@@ -126,7 +147,10 @@ extension VisionProviderError {
     }
 }
 
+/// The small recognition boundary implemented by both live Gemini and deterministic offline demo services.
 protocol MenuVisionProvider: Sendable {
+    /// Reads menu photos, translates the recognized items, and flags only the allergens requested by the user.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu
+    /// Produces a short explanation of one dish in the requested target language.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String
 }

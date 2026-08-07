@@ -1,3 +1,6 @@
+// Turns calculated money values into predictable display text, keeping symbol
+// and decimal-place rules separate from screens and bill calculations.
+
 import Foundation
 
 /// Formats amounts for display using a small explicit symbol map plus a
@@ -12,6 +15,8 @@ enum CurrencyFormat {
         "EUR": "€",
     ]
 
+    /// Formats an amount with the currency's usual decimal places and a familiar
+    /// symbol when known; unknown codes remain visible so the value is unambiguous.
     static func format(_ amount: Decimal, code: String) -> String {
         let upperCode = code.uppercased()
         let digits = BillMath.fractionDigits(forCurrency: upperCode)

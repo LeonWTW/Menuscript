@@ -1,3 +1,6 @@
+// Stores API keys in Apple's device-only Keychain and translates low-level status codes into app errors.
+// The wrapper gives the rest of the app a small testable interface instead of exposing Security-framework details.
+
 import Foundation
 import Security
 
@@ -9,6 +12,7 @@ struct KeychainStore: Sendable, SecretStore {
 
     private let service: String
 
+    /// Creates a store in one Keychain service namespace so app secrets cannot collide with unrelated entries.
     init(service: String = "com.leonwong.menuscript") {
         self.service = service
     }
@@ -68,6 +72,7 @@ struct KeychainStore: Sendable, SecretStore {
         }
     }
 
+    /// Builds the common Keychain lookup identity used consistently by reads, writes, and deletes.
     private func query(forKey key: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -76,7 +81,7 @@ struct KeychainStore: Sendable, SecretStore {
         ]
     }
 
-    /// Pure decoding seam used by tests to cover statuses/data that are hard
+    /// Separate decoding helper used by tests to cover statuses and data that are hard
     /// to manufacture through the signed simulator Keychain.
     static func decodeReadResult(status: OSStatus, data: Data?) throws -> String? {
         switch status {
@@ -96,12 +101,13 @@ struct KeychainStore: Sendable, SecretStore {
     }
 }
 
-/// Wraps a non-success `OSStatus` returned by a Keychain Services call.
+/// Represents either a failed Keychain status or stored data that cannot be decoded safely.
 enum KeychainError: Error, LocalizedError, Equatable {
     case unhandledStatus(OSStatus)
     case invalidResult
     case invalidUTF8
 
+    /// Converts technical Keychain failures into localized messages suitable for the Settings UI.
     var errorDescription: String? {
         switch self {
         case .unhandledStatus(let status):

@@ -1,11 +1,15 @@
+// Verifies that Gemini response text becomes safe, precise menu data even when the model returns imperfect JSON.
+// A local envelope builder reproduces the API shape without networking, so parser
+// compatibility and cleanup rules can be tested directly.
+
 import XCTest
 @testable import Menuscript
 
-/// Tests for `GeminiProvider.parseExtractResponse` — pure function, no network.
+/// Regression coverage for menu and explanation response parsing, including tolerant input and strict money handling.
 final class ExtractedMenuDecodeTests: XCTestCase {
 
     /// Wraps inner menu JSON in a realistic Gemini `generateContent` envelope,
-    /// including extra envelope-level keys the parser must ignore.
+    /// including extra keys the parser must ignore, so tests need no real API response.
     private func envelope(innerText: String) -> Data {
         let body: [String: Any] = [
             "candidates": [[
@@ -27,7 +31,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         return try! JSONSerialization.data(withJSONObject: body)
     }
 
-    // Fixture ①: normal envelope with 2 items.
+    /// Confirms a normal response preserves menu metadata, dish text, exact prices, categories, and confidence flags.
     func testParsesNormalEnvelopeWithTwoItems() throws {
         let inner = """
         {
@@ -58,7 +62,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertTrue(menu.items[1].lowConfidence)
     }
 
-    // Fixture ②: market-price item — price null, verbatim priceNote.
+    /// Ensures non-numeric market pricing remains explanatory text instead of becoming a misleading bill amount.
     func testMarketPriceItemHasNilPriceAndVerbatimNote() throws {
         let inner = """
         {
@@ -78,7 +82,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].priceNote, "時価")
     }
 
-    // Fixture ③: inner text is malformed JSON → .decodeFailed.
+    /// Maps broken inner JSON to a decode failure so the provider can make its single corrective retry.
     func testMalformedInnerJSONThrowsDecodeFailed() {
         let data = envelope(innerText: #"{"detectedLanguage": "日文", "items": ["#)
         XCTAssertThrowsError(try GeminiProvider.parseExtractResponse(data)) { error in
@@ -88,8 +92,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         }
     }
 
-    // Fixture ④: unknown JSON keys (envelope helper already adds envelope-level extras;
-    // here the inner payload also carries unknown keys) → tolerated.
+    /// Ignores unfamiliar fields at both envelope and menu levels so harmless Gemini additions do not break the app.
     func testUnknownKeysAreTolerated() throws {
         let inner = """
         {
@@ -111,7 +114,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].category, "湯品")
     }
 
-    // Decoded menu with zero items → .emptyMenu (not a decode failure, must not trigger retry).
+    /// Treats a valid but itemless response as an empty menu, not malformed JSON that should trigger a retry.
     func testEmptyItemsThrowsEmptyMenu() {
         let inner = #"{"detectedLanguage": "日文", "menuCurrency": "JPY", "restaurantName": null, "items": []}"#
         XCTAssertThrowsError(try GeminiProvider.parseExtractResponse(envelope(innerText: inner))) { error in
@@ -119,8 +122,8 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         }
     }
 
-    // Wire contract says price is a STRING, but a numeric price is tolerated;
-    // decimal strings must survive exactly (Decimal, not Double round-trip).
+    /// Accepts older numeric prices, preserves decimal precision, moves non-prices to
+    /// notes, and handles thousands separators.
     func testPriceParsingToleranceAndExactness() throws {
         let inner = """
         {
@@ -145,9 +148,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[3].price, Decimal(1200))
     }
 
-    // Regression: negative price strings must not parse as a price — menu prices
-    // are never negative, and an unguarded negative would silently reduce bill
-    // totals. It falls through to priceNote like any other non-numeric price text.
+    /// Prevents a negative recognized value from reducing bill totals by keeping it as untrusted price text.
     func testNegativePriceFallsThroughToPriceNote() throws {
         let inner = """
         {
@@ -165,7 +166,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].priceNote, "-500")
     }
 
-    // Defensive: model wrapped its JSON in a markdown fence despite instructions.
+    /// Tolerates a markdown code fence that Gemini may add despite being asked for bare JSON.
     func testCodeFencedInnerJSONIsStillParsed() throws {
         let inner = """
         ```json
@@ -179,15 +180,14 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].price, Decimal(150))
     }
 
-    // parseExplainResponse: same envelope, plain text inside.
+    /// Removes surrounding whitespace from a plain-text dish explanation before it reaches the interface.
     func testParseExplainResponseReturnsTrimmedText() throws {
         let text = "\n冬蔭功係泰國代表性酸辣蝦湯，主要材料有蝦、香茅、南薑同青檸葉。味道酸辣濃郁，通常配白飯食。 "
         let result = try GeminiProvider.parseExplainResponse(envelope(innerText: text))
         XCTAssertEqual(result, "冬蔭功係泰國代表性酸辣蝦湯，主要材料有蝦、香茅、南薑同青檸葉。味道酸辣濃郁，通常配白飯食。")
     }
 
-    // A missing or blank category (tolerant decode: WireItem.category is
-    // Optional) must not surface as an empty, unlabeled category chip.
+    /// Replaces a missing or blank category with “Other” so the interface never shows an unlabeled group.
     func testMissingOrBlankCategoryFallsBackToOther() throws {
         let inner = """
         {
@@ -205,7 +205,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[1].category, "其他")
     }
 
-    // Envelope with no candidates (e.g. safety-blocked) → .decodeFailed.
+    /// Turns a response with no generated candidate, such as a safety block, into a clear decode failure.
     func testEnvelopeWithoutCandidatesThrowsDecodeFailed() {
         let data = try! JSONSerialization.data(withJSONObject: ["promptFeedback": ["blockReason": "SAFETY"]])
         XCTAssertThrowsError(try GeminiProvider.parseExtractResponse(data)) { error in
@@ -215,7 +215,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         }
     }
 
-    // Summary + possibleAllergens present on the wire decode onto the domain Item.
+    /// Confirms new summary and possible-allergen fields reach the app's menu item unchanged.
     func testSummaryAndPossibleAllergensDecodeOntoItem() throws {
         let inner = """
         {
@@ -232,7 +232,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].possibleAllergens, ["peanut"])
     }
 
-    // Legacy payload without the new keys still decodes: summary nil, possibleAllergens [].
+    /// Protects compatibility with older responses that predate summaries and allergen suggestions.
     func testLegacyPayloadWithoutNewKeysDecodesWithDefaults() throws {
         let inner = """
         {
@@ -249,7 +249,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].possibleAllergens, [])
     }
 
-    // Whitespace-only summary normalises to nil; blank allergen entries are trimmed away.
+    /// Cleans blank summaries and allergen entries so empty labels never reach the interface.
     func testWhitespaceOnlySummaryNormalisesToNil() throws {
         let inner = """
         {
@@ -266,8 +266,7 @@ final class ExtractedMenuDecodeTests: XCTestCase {
         XCTAssertEqual(menu.items[0].possibleAllergens, ["soy"])
     }
 
-    // The model occasionally repeats an entry despite the verbatim instruction;
-    // duplicates (exact, case-variant, or padded) must not render twice in the alert.
+    /// Deduplicates repeated allergen names despite case or padding so one warning never appears multiple times.
     func testDuplicatePossibleAllergensAreDeduped() throws {
         let inner = """
         {

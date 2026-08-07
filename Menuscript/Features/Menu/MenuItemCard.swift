@@ -1,3 +1,6 @@
+// Renders one menu dish and its accessible actions from either live item data
+// or values frozen when the order was completed.
+
 import SwiftUI
 
 /// A single menu line: translated name (hero), original name (what the user
@@ -18,14 +21,20 @@ struct MenuItemCard: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var showAllergenAlert = false
 
+    /// Selects caller-supplied snapshot-safe values when available, otherwise
+    /// adapts the current live model for reusable previews and direct use.
     private var display: MenuItemCardPresentation {
         presentation ?? .live(item, isQuantityReadOnly: isQuantityReadOnly)
     }
 
+    /// Uses the tapped card's captured action data when supplied, with a live
+    /// compatibility fallback for older direct construction sites.
     private var resolvedActionContext: MenuItemActionContext {
         actionContext ?? .live(item)
     }
 
+    /// Combines the card with its allergen alert; all display branches share
+    /// this one warning presentation.
     var body: some View {
         cardBody
             .alert(Text("可能含有敏感原"), isPresented: $showAllergenAlert) {
@@ -58,6 +67,7 @@ struct MenuItemCard: View {
 
     // MARK: - Header (name + actions)
 
+    /// Lays out names, confidence/allergen indicators, and contextual actions.
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             nameBlock
@@ -67,6 +77,8 @@ struct MenuItemCard: View {
         }
     }
 
+    /// Presents translated and original names plus optional summary/status as
+    /// one spoken accessibility element with a purpose-built description.
     private var nameBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -123,6 +135,7 @@ struct MenuItemCard: View {
         .accessibilityHidden(true)
     }
 
+    /// Launches an image search using the same captured item context being shown.
     private var photoButton: some View {
         Button {
             onPhotoSearch(resolvedActionContext)
@@ -137,6 +150,7 @@ struct MenuItemCard: View {
         .accessibilityLabel("搵菜式相片")
     }
 
+    /// Opens AI dish details using the same captured item context being shown.
     private var explainButton: some View {
         Button {
             onExplain(resolvedActionContext)
@@ -153,6 +167,8 @@ struct MenuItemCard: View {
 
     // MARK: - Footer (price + stepper)
 
+    /// Places price and quantity vertically at large accessibility sizes and
+    /// horizontally otherwise, preserving readability without duplicate logic.
     @ViewBuilder
     private var footer: some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -169,6 +185,8 @@ struct MenuItemCard: View {
         }
     }
 
+    /// Shows a frozen quantity for completed orders or an editable stepper for
+    /// active orders, preventing historical quantities from being changed.
     @ViewBuilder
     private var quantityControl: some View {
         if display.isQuantityReadOnly {
@@ -182,7 +200,7 @@ struct MenuItemCard: View {
         }
     }
 
-    /// Gold is reserved for numbers the traveller decides with; the 時價
+    /// Gold is reserved for numbers the traveller decides with; the market-price
     /// fallback is words, so it stays in the primary text color.
     @ViewBuilder
     private var priceBlock: some View {
@@ -209,6 +227,8 @@ struct MenuItemCard: View {
         .accessibilityHidden(true)
     }
 
+    /// Builds one complete spoken summary because the visual price and metadata
+    /// are deliberately hidden from accessibility to avoid fragmented reading.
     private var accessibilitySummary: String {
         var text = L10n.string("%@，原文 %@", display.translatedName, display.originalName)
         if let priceValue = display.unitPrice {
@@ -239,6 +259,7 @@ struct MenuItemCard: View {
         return text
     }
 
+    /// Combines recognized allergen labels with the required advisory disclaimer.
     private var allergenAlertMessage: String {
         let labels = item.possibleAllergens.map(Allergen.displayLabel)
             .joined(separator: L10n.string("、"))
@@ -248,6 +269,8 @@ struct MenuItemCard: View {
 
     // MARK: - Card chrome
 
+    /// Draws the shared card surface, using a border in dark mode and a shadow
+    /// in light mode to create equivalent separation without hard-coded chrome.
     @ViewBuilder
     private var cardBackground: some View {
         let shape = RoundedRectangle(cornerRadius: MTRadius.card, style: .continuous)

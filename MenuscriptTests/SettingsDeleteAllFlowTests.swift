@@ -1,6 +1,10 @@
+// Verifies the Settings delete-all workflow coordinates storage, dismissal, and navigation safely.
+// Side effects are supplied as closures so success and failure behavior can be checked independently.
+
 import Testing
 @testable import Menuscript
 
+/// Errors injected to represent either a fetch or save failure in the persistence layer.
 private enum DeleteAllFlowFailure: Error, CaseIterable {
     case fetch
     case save
@@ -8,8 +12,10 @@ private enum DeleteAllFlowFailure: Error, CaseIterable {
 
 @MainActor
 @Suite("Settings delete-all flow")
+/// Protects the rule that the screen changes only after all history has been deleted successfully.
 struct SettingsDeleteAllFlowTests {
     @Test("Success dismisses and invokes navigation callback exactly once")
+    /// Confirms a successful deletion runs each storage and presentation action once.
     func successRunsEachEffectOnce() throws {
         var deleteCount = 0
         var dismissCount = 0
@@ -35,6 +41,7 @@ struct SettingsDeleteAllFlowTests {
     }
 
     @Test("Fetch and save failures leave presentation and navigation untouched")
+    /// Confirms any persistence error stays visible on the current screen and skips success callbacks.
     func failureHasNoPresentationEffects() {
         for failure in DeleteAllFlowFailure.allCases {
             var deleteCount = 0

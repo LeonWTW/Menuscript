@@ -1,3 +1,6 @@
+// Verifies the complete capture contract: photo preparation and ordering,
+// recognition safety, cancellation, provider selection, and all-or-nothing saving.
+
 import Foundation
 import Testing
 import SwiftData
@@ -7,10 +10,12 @@ import UIKit
 /// A `MenuVisionProvider` that always fails, used to exercise the error path
 /// without any network dependency.
 private struct FailingVisionProvider: MenuVisionProvider {
+    /// Simulates a rate-limit failure during recognition without using a network.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         throw VisionProviderError.rateLimited
     }
 
+    /// Keeps the test double protocol-complete with the same predictable failure.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         throw VisionProviderError.rateLimited
     }
@@ -19,6 +24,7 @@ private struct FailingVisionProvider: MenuVisionProvider {
 /// A `MenuVisionProvider` whose `extractMenu` sleeps long enough for a test
 /// to cancel it mid-flight, used to exercise cooperative cancellation.
 private struct SlowVisionProvider: MenuVisionProvider {
+    /// Delays a valid result so a test can cancel recognition while it is running.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         try await Task.sleep(nanoseconds: 2_000_000_000)
         return ExtractedMenu(
@@ -29,6 +35,7 @@ private struct SlowVisionProvider: MenuVisionProvider {
         )
     }
 
+    /// Supplies the unrelated protocol requirement with a fixed offline result.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         "explanation"
     }
@@ -38,6 +45,7 @@ private struct SlowVisionProvider: MenuVisionProvider {
 /// `summary` and `possibleAllergens`, used to verify those per-dish fields
 /// persist onto `MenuItem` and that the session snapshots the allergen profile.
 private struct AllergenVisionProvider: MenuVisionProvider {
+    /// Returns known allergen and summary fields so their persistence can be checked exactly.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         ExtractedMenu(
             detectedLanguage: "日文",
@@ -50,17 +58,20 @@ private struct AllergenVisionProvider: MenuVisionProvider {
         )
     }
 
+    /// Supplies the unrelated protocol requirement with a fixed offline result.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         "explanation"
     }
 }
 
-/// Actor-backed spy used to prove that capture-side validation stops a bad
-/// batch before the provider boundary.
+/// Actor-backed spy used to prove that capture validation stops a bad batch
+/// before the provider is called.
 private actor CountingVisionProvider: MenuVisionProvider {
     private(set) var extractCallCount = 0
     private(set) var extractedImageBatches: [[Data]] = []
 
+    /// Records every submitted image batch before returning one known dish.
+    /// Actor isolation makes these observations safe across asynchronous tasks.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         extractCallCount += 1
         extractedImageBatches.append(images)
@@ -81,6 +92,7 @@ private actor CountingVisionProvider: MenuVisionProvider {
         )
     }
 
+    /// Supplies the unrelated protocol requirement with a fixed offline result.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         "explanation"
     }
@@ -92,20 +104,25 @@ private actor CountingVisionProvider: MenuVisionProvider {
 private actor NonCooperativeVisionProvider: MenuVisionProvider {
     private var continuation: CheckedContinuation<ExtractedMenu, Never>?
 
+    /// Reports when recognition has reached the deliberately suspended provider call.
     var isWaiting: Bool {
         continuation != nil
     }
 
+    /// Suspends until the test releases a result and intentionally ignores cancellation.
     func extractMenu(images: [Data], targetLanguage: String, allergens: [String]) async throws -> ExtractedMenu {
         await withCheckedContinuation { continuation in
             self.continuation = continuation
         }
     }
 
+    /// Supplies the unrelated protocol requirement with a fixed offline result.
     func explainDish(original: String, language: String, targetLanguage: String) async throws -> String {
         "explanation"
     }
 
+    /// Releases the suspended request with a valid late result, allowing the test
+    /// to prove cancelled data is still rejected before persistence.
     func completeRequest() {
         continuation?.resume(returning: ExtractedMenu(
             detectedLanguage: "日文",
@@ -126,23 +143,29 @@ private actor NonCooperativeVisionProvider: MenuVisionProvider {
     }
 }
 
+/// Error injected on the first save attempt to exercise cleanup and retry behavior.
 private enum InjectedSaveError: Error {
     case firstAttempt
 }
 
+/// Secret store that behaves like a device with no configured API key.
 private struct MissingSecretStore: SecretStore {
+    /// Always reports that no secret is stored.
     func read(_ key: String) throws -> String? { nil }
+    /// Accepts the protocol call without storing data because tests never need it.
     func set(_ value: String, forKey key: String) throws {}
+    /// Accepts the protocol call because the store is already empty.
     func delete(_ key: String) throws {}
 }
 
 /// Thread-safe spy for the direct camera/DEBUG preparation path. The
-/// preprocessor itself stays synchronous, so the test can observe exactly
-/// which executor invoked it without introducing another async seam.
+/// preprocessor itself stays synchronous, so the test can observe whether it
+/// ran in the background without adding another asynchronous layer.
 private final class ThreadRecordingPhotoPreparer: @unchecked Sendable {
     private let lock = NSLock()
     private var mainThreadValues: [Bool] = []
 
+    /// Records the executing thread and returns a tiny valid prepared photo.
     func prepare(_ image: UIImage) -> ImagePrep.PreparedPhoto? {
         lock.withLock {
             mainThreadValues.append(Thread.isMainThread)
@@ -150,6 +173,7 @@ private final class ThreadRecordingPhotoPreparer: @unchecked Sendable {
         return ImagePrep.PreparedPhoto(preview: image, jpegData: Data([0xA1]))
     }
 
+    /// Confirms that preparation ran at least once and never blocked the main thread.
     var ranOnlyOffMain: Bool {
         lock.withLock {
             !mainThreadValues.isEmpty && mainThreadValues.allSatisfy { !$0 }
@@ -157,16 +181,21 @@ private final class ThreadRecordingPhotoPreparer: @unchecked Sendable {
     }
 }
 
+/// Lock-protected counter used by concurrently running closures to verify service
+/// calls without introducing a data race into the test itself.
 private final class CaptureInvocationCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var storedCount = 0
 
+    /// Returns the current value while holding the lock.
     var count: Int { lock.withLock { storedCount } }
 
+    /// Adds one call in a thread-safe way.
     func increment() {
         lock.withLock { storedCount += 1 }
     }
 
+    /// Adds one and returns the new value, which lets a test fail one exact invocation.
     func nextCount() -> Int {
         lock.withLock {
             storedCount += 1
@@ -183,10 +212,12 @@ private final class ControlledDirectPhotoPreparer: @unchecked Sendable {
     private var startedIndices: Set<Int> = []
     private let releaseGates = [DispatchSemaphore(value: 0), DispatchSemaphore(value: 0)]
 
+    /// Remembers the first image so each input can use an independent release gate.
     init(firstImage: UIImage) {
         self.firstImage = firstImage
     }
 
+    /// Blocks the chosen image until the test releases it, then returns unique bytes.
     func prepare(_ image: UIImage) -> ImagePrep.PreparedPhoto? {
         let index = image === firstImage ? 0 : 1
         _ = lock.withLock {
@@ -199,18 +230,22 @@ private final class ControlledDirectPhotoPreparer: @unchecked Sendable {
         )
     }
 
+    /// Confirms both background preparations reached their gates before release.
     func hasStartedBothPreparations() -> Bool {
         lock.withLock { startedIndices == [0, 1] }
     }
 
+    /// Allows one selected preparation to finish, enabling reverse-order completion tests.
     func release(_ index: Int) {
         releaseGates[index].signal()
     }
 }
 
+/// Actor-backed FX spy that returns one known live quote and safely counts calls.
 private actor ExplicitFXProvider: FXRateProviding {
     private var callCount = 0
 
+    /// Records the request and returns a fixed quote whose source can be asserted.
     func rate(from: String, to: String) async -> FXRate? {
         callCount += 1
         return FXRate(
@@ -221,12 +256,15 @@ private actor ExplicitFXProvider: FXRateProviding {
         )
     }
 
+    /// Safely exposes the provider's call count to tests.
     func calls() -> Int { callCount }
 }
 
+/// Exercises capture behavior on the main actor, matching the production view model.
 @MainActor
 @Suite("CaptureViewModel")
 struct CaptureViewModelTests {
+    /// Creates isolated in-memory persistence so no test touches user data.
     private func makeContext() throws -> ModelContext {
         let schema = Schema([MenuSession.self, MenuItem.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -234,6 +272,7 @@ struct CaptureViewModelTests {
         return ModelContext(container)
     }
 
+    /// Creates a tiny valid image that keeps preparation tests fast and deterministic.
     private func makeDemoImage() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
         return renderer.image { context in
@@ -242,6 +281,7 @@ struct CaptureViewModelTests {
         }
     }
 
+    /// Cooperatively waits for asynchronous state without relying on fixed timing.
     private func waitUntil(
         maxIterations: Int = 10_000,
         _ condition: () async -> Bool
@@ -255,8 +295,8 @@ struct CaptureViewModelTests {
         return false
     }
 
-    /// Every test gets its own defaults domain. The injected-provider seam is
-    /// hermetic by default, so USD exercises its normal cross-currency path.
+    /// Every test gets private Settings. Injected vision providers use offline
+    /// FX by default, so USD tests conversion without contacting a live service.
     private func makeDefaults(homeCurrency: String = "USD") throws -> (defaults: UserDefaults, suiteName: String) {
         let suiteName = "CaptureViewModelTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -266,6 +306,8 @@ struct CaptureViewModelTests {
         return (defaults, suiteName)
     }
 
+    /// Protects the rule that adding a camera photo immediately reserves its place
+    /// while expensive JPEG work happens away from the user-interface thread.
     @Test("Direct additions reserve a pending slot immediately and prepare off the main thread")
     func directAdditionsPrepareOffMain() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -288,6 +330,7 @@ struct CaptureViewModelTests {
         #expect(preparer.ranOnlyOffMain)
     }
 
+    /// Protects the user's selected order when two preparations finish in reverse.
     @Test("Direct additions retain call order when JPEG preparation completes in reverse")
     func directAdditionsKeepStableOrderAcrossOverlappingPreparations() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -321,6 +364,8 @@ struct CaptureViewModelTests {
         #expect(viewModel.photos[1].jpegData == Data([0xB2]))
     }
 
+    /// Protects test isolation: an injected vision provider must not silently
+    /// construct live FX services, while its recognition mode remains accurate.
     @Test("Injected non-mock providers use mock FX unless the test explicitly injects one")
     func injectedProviderDefaultsToMockFXWithoutChangingLiveProvenance() async throws {
         let (defaults, suiteName) = try makeDefaults(homeCurrency: "USD")
@@ -350,6 +395,7 @@ struct CaptureViewModelTests {
         #expect(session.fxQuoteDate == "2026-01-15")
     }
 
+    /// Confirms an explicitly supplied FX provider takes priority over the safe test fallback.
     @Test("An explicitly injected FX provider overrides the hermetic default")
     func explicitFXProviderOverridesHermeticFallback() async throws {
         let (defaults, suiteName) = try makeDefaults(homeCurrency: "USD")
@@ -380,6 +426,8 @@ struct CaptureViewModelTests {
         #expect(session.fxRate == 0.25)
     }
 
+    /// Protects the normal success path from prepared photo through one saved,
+    /// correctly ordered session, followed by release of staged image memory.
     @Test("Successful recognition persists a session with 10 ordered items")
     func successfulRecognitionPersistsSession() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -418,6 +466,7 @@ struct CaptureViewModelTests {
         #expect(fetchedSessions.count == 1)
     }
 
+    /// Protects retry behavior by showing a useful provider error without losing photos.
     @Test("Failing provider surfaces the localized error and preserves photos")
     func failingProviderSurfacesError() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -439,6 +488,8 @@ struct CaptureViewModelTests {
         #expect(viewModel.isRecognizing == false)
     }
 
+    /// Protects all-or-nothing saving: a failed first attempt leaves no partial records,
+    /// and retry reuses the same photo to create exactly one session and item.
     @Test("A failed save removes the inserted graph; retry sends the same photo and persists exactly once")
     func persistenceFailureCleansGraphAndRetryPersistsExactlyOnce() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -512,6 +563,8 @@ struct CaptureViewModelTests {
         #expect(await provider.extractedImageBatches == [[stagedJPEG], [stagedJPEG]])
     }
 
+    /// Protects unrelated unsaved user edits when capture cleans up only the
+    /// session and items created by its own failed save.
     @Test("Failed recognition persistence does not roll back unrelated pending edits")
     func persistenceFailurePreservesUnrelatedPendingEdits() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -566,6 +619,8 @@ struct CaptureViewModelTests {
         #expect(context.changedModelsArray.compactMap { $0 as? MenuItem }.allSatisfy { $0.originalName == "既有菜式" })
     }
 
+    /// Protects cooperative cancellation from saving a result or showing an error,
+    /// while retaining the photo because recognition never completed.
     @Test("Cancelling recognize before it finishes discards the result: no session is persisted, no error is shown")
     func cancellingRecognizeDiscardsInFlightResult() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -593,6 +648,7 @@ struct CaptureViewModelTests {
         #expect(fetchedSessions.isEmpty)
     }
 
+    /// Protects the post-await cancellation guard even when a provider ignores cancellation.
     @Test("A cancelled non-cooperative provider result never reaches persistence")
     func cancelledNonCooperativeResultIsDiscarded() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -638,6 +694,8 @@ struct CaptureViewModelTests {
         #expect(context.insertedModelsArray.isEmpty)
     }
 
+    /// Protects photos added after recognition begins: only the captured input
+    /// snapshot is cleared when its session saves successfully.
     @Test("Photo appended after recognition starts survives; the recognized snapshot is removed")
     func photoAppendedDuringRecognitionSurvives() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -668,6 +726,7 @@ struct CaptureViewModelTests {
         #expect(viewModel.photos.first?.id != recognizedID)
     }
 
+    /// Confirms live recognition with no stored key asks the user to update Settings.
     @Test("Missing API key with mock disabled sets needsAPIKey")
     func missingAPIKeySetsNeedsAPIKey() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -689,6 +748,8 @@ struct CaptureViewModelTests {
         #expect(viewModel.isRecognizing == false)
     }
 
+    /// Protects recognized dish summaries/allergens and the exact allergen profile
+    /// used for that session so later Settings changes cannot rewrite history.
     @Test("Recognition persists per-dish summary and possibleAllergens, and snapshots the session allergen profile")
     func recognitionPersistsAllergenFieldsAndProfile() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -718,6 +779,7 @@ struct CaptureViewModelTests {
         #expect(orderedItems[1].possibleAllergens == [])
     }
 
+    /// Protects the shared six-photo limit and reports every image that could not be added.
     @Test("Global six-photo cap includes direct additions and reports every rejection")
     func globalPhotoCapRejectsOverflow() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -734,6 +796,7 @@ struct CaptureViewModelTests {
         #expect(await waitUntil { viewModel.pendingPhotoCount == 0 })
     }
 
+    /// Confirms still-loading reservations consume capacity immediately, preventing overflow.
     @Test("Pending reservations count toward the global cap")
     func pendingReservationsCountTowardCap() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -752,6 +815,7 @@ struct CaptureViewModelTests {
         #expect(await waitUntil { viewModel.pendingPhotoCount == 4 })
     }
 
+    /// Protects the add-photo gate across loading, recognition, and full-capacity states.
     @Test("Adding controls pause for pending work, recognition, and full capacity")
     func addMorePhotosGateTracksCaptureState() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -779,6 +843,8 @@ struct CaptureViewModelTests {
         #expect(await waitUntil { viewModel.pendingPhotoCount == 0 })
     }
 
+    /// Protects all-or-nothing submission: one failed JPEG blocks the complete
+    /// batch before any photos reach the vision provider.
     @Test("One JPEG preparation failure blocks the whole batch and retains every staged photo")
     func partialJPEGFailureIsAtomic() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -809,6 +875,8 @@ struct CaptureViewModelTests {
         #expect(viewModel.captureIssue == .photoPreparationFailed(count: 1))
     }
 
+    /// Protects the provider from oversized requests and retains photos so the
+    /// user can remove some and retry.
     @Test("Oversized encoded payload is stopped before the provider and photos are retained")
     func oversizedPayloadStopsBeforeProvider() async throws {
         let (defaults, suiteName) = try makeDefaults()
@@ -839,8 +907,10 @@ struct CaptureViewModelTests {
     }
 }
 
+/// Verifies the exact request-size boundary independently of image preparation.
 @Suite("Capture request budget")
 struct CaptureRequestBudgetTests {
+    /// Protects the inclusive 18 MB contract and rejects the first byte beyond it.
     @Test("18,000,000-byte boundary is inclusive and one byte over is rejected")
     func exactByteBoundary() {
         #expect(CaptureLimits.isWithinRequestBudget(estimatedBytes: 18_000_000))

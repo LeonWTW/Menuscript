@@ -1,3 +1,6 @@
+// Contains deterministic menu sorting, filtering, and cart calculations so
+// screen views remain simple and the rules can be tested without SwiftUI.
+
 import Foundation
 
 /// Pure view-logic helpers for the Menu screen: category derivation, filtering
@@ -26,7 +29,7 @@ enum MenuLogic {
 
     /// Cart totals over all items with `quantity > 0` (matching `BillView.orderLines`):
     /// `kinds` is the count of distinct ordered items and `count` is the sum of their
-    /// quantities — both include unpriced (時價) lines, so an order made up entirely of
+    /// quantities — both include market-price lines, so an order made up entirely of
     /// unpriced items still surfaces a non-zero cart. `subtotal` sums `priceValue × quantity`
     /// over the priced subset only; `hasUnpriced` flags whether any ordered line was left
     /// out of `subtotal` because it has no price.

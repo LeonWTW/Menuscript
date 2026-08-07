@@ -1,10 +1,13 @@
+// Defines the Menu feature's shared color, type, radius, and spacing tokens so
+// every screen uses one accessible visual language in light and dark modes.
+
 import SwiftUI
 import UIKit
 
 // MARK: - Menu theme tokens (WF-4, owned by design)
 //
-// Direction 「木牌」(wood tag): warm charcoal neutrals from the izakaya wall,
-// champagne-gold converted price (the wooden price tag), vermilion 朱 accent.
+// Direction: a wooden price tag, with warm charcoal neutrals from an izakaya wall,
+// champagne-gold converted prices, and a vermilion-red accent.
 // Accent appears on exactly three things: selected chip, stepper controls,
 // checkout CTA. One radius system, SF Pro only, Dynamic Type relative styles,
 // monospaced digits on every number.
@@ -23,6 +26,7 @@ private func mtRGB(_ r: Int, _ g: Int, _ b: Int) -> UIColor {
     )
 }
 
+/// Supplies the private initializer used to build every adaptive theme color.
 private extension Color {
     /// Dynamic color that resolves per trait collection (light / dark).
     init(mtLight light: UIColor, mtDark dark: UIColor) {
@@ -34,6 +38,7 @@ private extension Color {
 
 // MARK: - Colors
 
+/// Names the Menu palette by visual purpose so views do not repeat raw colors.
 extension Color {
     /// Screen background. Dark #151210 (warm off-black), Light #F5F1EA (warm paper).
     static let mtBackground = Color(
@@ -68,7 +73,7 @@ extension Color {
         mtDark: mtRGB(0xA8, 0x9E, 0x92)
     )
 
-    /// The one accent, vermilion 朱 (saturation ≈73-76%, hue ≈13°, not purple).
+    /// The one accent, vermilion red (saturation ≈73-76%, hue ≈13°, not purple).
     /// Used ONLY for: selected chip fill, stepper controls, checkout CTA.
     /// Dark #C94F36: white label ≈4.5:1, fill vs surface ≈3.7:1.
     /// Light #B8432C: white label ≈5.4:1, fill vs white surface ≈5.1:1.
@@ -103,6 +108,7 @@ extension Color {
 
 // MARK: - Typography (SF Pro, Dynamic Type relative, digits monospaced)
 
+/// Names the Menu typography roles so hierarchy and Dynamic Type stay consistent.
 extension Font {
     /// Translated dish name: hierarchy #1. title3 semibold.
     static let mtDishName = Font.system(.title3, design: .default, weight: .semibold)

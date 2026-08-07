@@ -1,8 +1,12 @@
+// Contains deterministic money calculations that can be reused and tested
+// without loading the interface, database, or network services.
+
 import Foundation
 
-/// Pure bill-splitting arithmetic. No SwiftData, no UI — Decimal in, Decimal out.
+/// Adds, converts, and splits bill amounts without changing the database or UI,
+/// which keeps money rules predictable and easy to test.
 enum BillMath {
-    /// Sum of price × quantity across all lines. Lines with qty 0 contribute 0.
+    /// Adds price × quantity for every line; a zero-quantity line adds nothing.
     static func subtotal(lines: [(price: Decimal, qty: Int)]) -> Decimal {
         lines.reduce(Decimal(0)) { runningTotal, line in
             runningTotal + line.price * Decimal(line.qty)
@@ -15,8 +19,8 @@ enum BillMath {
         return subtotal * multiplier
     }
 
-    /// Even split of `total` across `people`, rounded UP at `fractionDigits`
-    /// so that `people × perPerson` is always >= `total`.
+    /// Splits a total evenly and rounds each share upward to the requested decimal
+    /// places so the combined shares never fall short of the bill.
     static func perPerson(total: Decimal, people: Int, fractionDigits: Int) -> Decimal {
         guard people > 0 else { return total }
         var share = total / Decimal(people)
@@ -25,12 +29,12 @@ enum BillMath {
         return rounded
     }
 
-    /// Converts an amount using a floating-point FX rate.
+    /// Converts an amount to another currency using the supplied exchange rate.
     static func converted(_ amount: Decimal, rate: Double) -> Decimal {
         amount * decimal(from: rate)
     }
 
-    /// Number of fraction digits conventionally used to display a currency.
+    /// Returns the usual number of decimal places shown for a currency.
     static func fractionDigits(forCurrency code: String) -> Int {
         switch code.uppercased() {
         case "JPY", "KRW", "VND":
@@ -40,8 +44,8 @@ enum BillMath {
         }
     }
 
-    /// Converts a Double to Decimal via its shortest round-tripping string
-    /// representation, avoiding binary-fraction artifacts (e.g. 0.1 + 0.2).
+    /// Converts a floating-point rate through text first, avoiding tiny computer
+    /// rounding artifacts in otherwise simple decimal values such as 0.1.
     private static func decimal(from double: Double) -> Decimal {
         Decimal(string: String(double)) ?? Decimal(double)
     }

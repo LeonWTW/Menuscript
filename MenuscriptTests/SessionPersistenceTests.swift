@@ -1,3 +1,6 @@
+// Verifies completed-bill snapshots and legacy menu sessions survive closing and reopening disk storage.
+// It also protects forward compatibility by rejecting snapshot formats newer than this app understands.
+
 import Foundation
 import SwiftData
 import Testing
@@ -5,7 +8,9 @@ import Testing
 
 @MainActor
 @Suite("Lifecycle disk persistence")
+/// Covers real SwiftData disk round trips for lifecycle state, exchange-rate source details, and frozen bill data.
 struct SessionPersistenceTests {
+    /// Opens a SwiftData container at a chosen temporary URL so a later container can read the same store.
     private func makeContainer(at url: URL) throws -> ModelContainer {
         let configuration = ModelConfiguration(
             "LifecycleTests",
@@ -21,6 +26,7 @@ struct SessionPersistenceTests {
     }
 
     @Test("Completed snapshots and legacy nil status survive a disk round trip")
+    /// Confirms reopening storage preserves a finished bill while old records retain their legacy meaning.
     func completedAndLegacyDiskRoundTrip() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MenuscriptLifecycle-\(UUID().uuidString)", isDirectory: true)
@@ -103,6 +109,7 @@ struct SessionPersistenceTests {
     }
 
     @Test("Snapshot codec rejects unsupported versions")
+    /// Confirms future snapshot data is rejected clearly instead of being misread as today's format.
     func rejectsUnsupportedSnapshotVersion() throws {
         let session = MenuSession(
             detectedLanguage: "日文",

@@ -1,11 +1,16 @@
+// Produces a realistic fixed menu and dish explanations without reading photos or contacting Gemini.
+// The predictable sample menu lets Demo Mode, previews, and tests work reliably offline.
+
 import Foundation
 
 /// Fully offline, deterministic menu provider used by demo mode.
 ///
-/// The fixture has a language-neutral core and explicit English/Traditional
+/// The sample has a language-neutral core and explicit English/Traditional
 /// Chinese projections. Demo input is intentionally permissive: unsupported
 /// target text falls back to Traditional Chinese instead of failing a demo.
 struct MockVisionProvider: MenuVisionProvider {
+    /// Presents the shared sample in English or Traditional Chinese and reports requested allergen matches.
+    /// Photo bytes are intentionally ignored because demo mode must remain deterministic and fully offline.
     func extractMenu(
         images: [Data],
         targetLanguage: String,
@@ -38,6 +43,7 @@ struct MockVisionProvider: MenuVisionProvider {
         )
     }
 
+    /// Returns a fixed-style explanation translated for the demo's supported target language.
     func explainDish(
         original: String,
         language: String,
@@ -149,10 +155,12 @@ struct MockVisionProvider: MenuVisionProvider {
     ]
 }
 
+/// Reduces free-form language settings to the two translations included in the demo sample.
 private enum MockTargetLanguage {
     case traditionalChinese
     case english
 
+    /// Recognizes English labels and codes; every other value safely falls back to Traditional Chinese.
     init(_ rawValue: String) {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = trimmed.lowercased()
@@ -161,11 +169,12 @@ private enum MockTargetLanguage {
             self = .english
         } else {
             // Chinese locales and every unknown value intentionally share the
-            // only non-English fixture projection, so demo input never fails.
+            // only non-English sample, so demo input never fails.
             self = .traditionalChinese
         }
     }
 
+    /// Names the sample menu's Japanese source language in the selected display language.
     var detectedLanguage: String {
         switch self {
         case .traditionalChinese: return "日文"
@@ -174,7 +183,9 @@ private enum MockTargetLanguage {
     }
 }
 
+/// Language-neutral facts for one demo dish plus its translated display copies.
 private struct Fixture {
+    /// Text fields that change with the selected display language.
     struct Copy {
         let translated: String
         let priceNote: String?
@@ -189,6 +200,7 @@ private struct Fixture {
     let zh: Copy
     let en: Copy
 
+    /// Chooses the translated fields while leaving price, confidence, and allergen facts shared.
     func copy(for target: MockTargetLanguage) -> Copy {
         switch target {
         case .traditionalChinese: return zh

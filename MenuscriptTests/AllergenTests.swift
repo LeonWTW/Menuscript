@@ -1,3 +1,6 @@
+// Verifies the stable allergen vocabulary shared by Settings, local storage, AI prompts, and menu results.
+// The tests protect both predefined choices and free-text input without contacting an AI service.
+
 import Foundation
 import Testing
 @testable import Menuscript
@@ -8,6 +11,7 @@ import Testing
 @Suite("Allergen contract")
 struct AllergenContractTests {
     @Test("allCases has all 11 allergens with the expected slugs in a stable order")
+    /// Confirms every supported allergen has a permanent storage key in a predictable order.
     func allCasesSlugs() {
         #expect(Allergen.allCases.count == 11)
         #expect(Allergen.allCases.map(\.rawValue) == [
@@ -17,6 +21,7 @@ struct AllergenContractTests {
     }
 
     @Test("id equals rawValue")
+    /// Confirms SwiftUI can use the same stable slug to identify each allergen choice.
     func idEqualsRawValue() {
         for allergen in Allergen.allCases {
             #expect(allergen.id == allergen.rawValue)
@@ -24,6 +29,7 @@ struct AllergenContractTests {
     }
 
     @Test("promptLabel returns the stable English AI-contract label")
+    /// Confirms the AI always receives the agreed English term for each preset.
     func promptLabelsMatchContract() {
         #expect(Allergen.peanut.promptLabel == "peanut")
         #expect(Allergen.treeNuts.promptLabel == "tree nuts")
@@ -44,12 +50,14 @@ struct AllergenContractTests {
 @Suite("Allergen.parse")
 struct AllergenParseTests {
     @Test("Preset slugs map to promptLabels, unknown slugs are dropped")
+    /// Confirms saved preset keys become AI labels while obsolete or corrupt keys are ignored.
     func presetSlugsMapAndDropUnknown() {
         #expect(Allergen.parse(presets: "peanut,soy", custom: "") == ["peanut", "soy"])
         #expect(Allergen.parse(presets: "peanut,unknownslug,soy", custom: "") == ["peanut", "soy"])
     }
 
     @Test("Dedupes case-insensitively across presets and custom, preserving first occurrence")
+    /// Confirms repeated entries are sent once, preserving the user's first spelling.
     func dedupesCaseInsensitivelyAcrossPresetsAndCustom() {
         #expect(
             Allergen.parse(presets: "peanut,soy", custom: "Soy, PEANUT, Sesame")
@@ -58,6 +66,7 @@ struct AllergenParseTests {
     }
 
     @Test("Custom splits on comma, ideographic comma, and newline")
+    /// Confirms users can separate custom allergens with punctuation common in English or Chinese text.
     func customSplitsOnCommaIdeographicCommaAndNewline() {
         #expect(
             Allergen.parse(presets: "", custom: "香菜、九層塔\n芫茜,羅勒")
@@ -66,6 +75,7 @@ struct AllergenParseTests {
     }
 
     @Test("Custom entries are trimmed and empty entries dropped")
+    /// Confirms extra spaces and empty separators do not become meaningless AI prompt entries.
     func customEntriesTrimmedAndEmptiesDropped() {
         #expect(
             Allergen.parse(presets: "", custom: "  香菜  ,, 、\n  , 九層塔 ")
@@ -74,12 +84,14 @@ struct AllergenParseTests {
     }
 
     @Test("Empty inputs yield an empty list")
+    /// Confirms a user with no allergen profile sends no allergen instruction.
     func emptyInputsYieldEmpty() {
         #expect(Allergen.parse(presets: "", custom: "").isEmpty)
         #expect(Allergen.parse(presets: "   ", custom: "  \n 、 ,").isEmpty)
     }
 
     @Test("200-char cap skips entries that would overflow but keeps later ones that fit")
+    /// Confirms the prompt-length limit keeps complete entries and still considers shorter later entries.
     func capKeepsWholeEntries() {
         let a = String(repeating: "a", count: 60)
         let b = String(repeating: "b", count: 60)
@@ -93,6 +105,7 @@ struct AllergenParseTests {
     }
 
     @Test("An entry longer than the cap is skipped whole — never truncated, never starving later entries")
+    /// Confirms an oversized entry is dropped intact without hiding valid entries that follow it.
     func overlongEntrySkippedWhole() {
         let long = String(repeating: "x", count: 250)
         #expect(Allergen.parse(presets: "", custom: long).isEmpty)
@@ -107,6 +120,7 @@ struct AllergenParseTests {
 @Suite("Allergen slug serialization")
 struct AllergenSlugSerializationTests {
     @Test("selectedSlugs parses a comma-joined string into a slug set")
+    /// Confirms the compact saved string restores the user's selected preset set.
     func selectedSlugsParses() {
         #expect(Allergen.selectedSlugs("peanut,soy,wheat") == ["peanut", "soy", "wheat"])
         #expect(Allergen.selectedSlugs("").isEmpty)
@@ -114,6 +128,7 @@ struct AllergenSlugSerializationTests {
     }
 
     @Test("serialize emits allCases order and drops unknown slugs")
+    /// Confirms preset selections are stored deterministically and invalid keys are removed.
     func serializeEmitsStableOrderAndDropsUnknown() {
         #expect(Allergen.serialize(["soy", "peanut", "wheat"]) == "peanut,soy,wheat")
         #expect(Allergen.serialize(["peanut", "bogus"]) == "peanut")
@@ -121,6 +136,7 @@ struct AllergenSlugSerializationTests {
     }
 
     @Test("selectedSlugs and serialize round-trip")
+    /// Confirms saving and loading a valid selection preserves the same allergens.
     func selectedSlugsAndSerializeRoundTrip() {
         #expect(Allergen.serialize(Allergen.selectedSlugs("wheat,peanut")) == "peanut,wheat")
         #expect(Allergen.selectedSlugs(Allergen.serialize(["soy", "peanut"])) == ["peanut", "soy"])
@@ -135,6 +151,7 @@ struct AllergenSlugSerializationTests {
 @Suite("Allergen.displayLabel")
 struct AllergenDisplayLabelTests {
     @Test("Matches a promptLabel case-insensitively to its localized displayName")
+    /// Confirms known AI-returned terms map back to localized labels regardless of letter case.
     func matchesCaseInsensitively() {
         #expect(Allergen.displayLabel(for: "Tree Nuts") == Allergen.treeNuts.displayName)
         #expect(Allergen.displayLabel(for: "TREE NUTS") == Allergen.treeNuts.displayName)
@@ -142,11 +159,13 @@ struct AllergenDisplayLabelTests {
     }
 
     @Test("Trims surrounding whitespace before matching")
+    /// Confirms harmless spaces around an AI result do not prevent localization.
     func trimsBeforeMatching() {
         #expect(Allergen.displayLabel(for: "  peanut  ") == Allergen.peanut.displayName)
     }
 
     @Test("Passes an unmatched hit through verbatim (trimmed)")
+    /// Confirms custom allergen terms remain readable when they are not predefined presets.
     func passesUnmatchedThroughVerbatim() {
         #expect(Allergen.displayLabel(for: "香菜") == "香菜")
         #expect(Allergen.displayLabel(for: "  九層塔 ") == "九層塔")

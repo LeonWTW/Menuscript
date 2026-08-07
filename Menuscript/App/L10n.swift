@@ -1,13 +1,14 @@
+// Localizes text created in Swift code, where SwiftUI cannot automatically
+// look up the app's own language preference.
+
 import Foundation
 
-/// Views 入面嘅 LocalizedStringKey 由 SwiftUI 自動查表；
-/// 由 code 砌出嚟嘅字串（error message、summary 等）經呢度，
-/// 跟返 app 內語言設定而唔係系統語言。
+/// Looks up programmatically created text, such as errors and summaries, using
+/// the language chosen inside the app rather than blindly using the device language.
 enum L10n {
-    /// 顯式揀咗語言但搵唔到對應 lproj 時唔可以 fallback 去 Bundle.main：
-    /// source 語言（zh-Hant）唔會編出 lproj，而 Bundle.main 會跟系統語言
-    /// 揀咗 en，令「英文系統 + app 內揀繁中」錯誤顯示英文。
-    /// key 本身就係 zh-Hant 原文，所以直接回傳 key 先係正確 fallback。
+    /// Finds a key in the selected language bundle. If an explicitly selected
+    /// bundle is unavailable, the Traditional Chinese source key is the safest
+    /// fallback; `Bundle.main` could silently switch back to the device language.
     private static func lookup(_ key: String, defaults: UserDefaults) -> String {
         let lang = AppLanguage.resolve(from: defaults)
         guard let identifier = lang.locale?.identifier else {
@@ -20,10 +21,12 @@ enum L10n {
         return bundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
+    /// Returns a localized string that contains no formatting placeholders.
     static func string(_ key: String, defaults: UserDefaults = .standard) -> String {
         lookup(key, defaults: defaults)
     }
 
+    /// Returns a localized string after inserting values into its format placeholders.
     static func string(_ key: String, _ args: CVarArg..., defaults: UserDefaults = .standard) -> String {
         String(format: lookup(key, defaults: defaults), arguments: args)
     }

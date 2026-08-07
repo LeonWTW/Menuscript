@@ -1,12 +1,17 @@
+// Verifies the offline sample menu behaves like a predictable substitute for Gemini recognition.
+// Deterministic outputs let developers exercise the full app without an API key or user photos.
+
 import Foundation
 import Testing
 @testable import Menuscript
 
 @Suite("MockVisionProvider")
+/// Protects demo translations, allergen filtering, language fallback, explanations, and repeatability.
 struct MockVisionProviderTests {
     private let provider = MockVisionProvider()
 
     @Test("English and Traditional Chinese projections localize every field")
+    /// Confirms supported target languages receive complete, internally consistent demo menus.
     func targetLanguageProjection() async throws {
         let english = try await provider.extractMenu(
             images: [Data([1])],
@@ -38,6 +43,7 @@ struct MockVisionProviderTests {
     }
 
     @Test("Allergen hits are an exact, case-insensitive subset of the request")
+    /// Confirms demo warnings can only contain allergen text the user actually requested.
     func allergenSubset() async throws {
         let requested = ["SOY", "Peanut", "egg", "soy", "GLUTEN"]
         let menu = try await provider.extractMenu(
@@ -65,6 +71,7 @@ struct MockVisionProviderTests {
     }
 
     @Test("Empty allergen request means every item has no hits")
+    /// Confirms no allergen profile produces no warnings in the demo result.
     func emptyAllergens() async throws {
         let menu = try await provider.extractMenu(
             images: [],
@@ -80,6 +87,7 @@ struct MockVisionProviderTests {
             "Chinese", "廣東話", "简体中文", "日本語", "Français", "亂打xyz", "zh-CN", "   ",
         ]
     )
+    /// Confirms unrecognized language text uses Traditional Chinese as the safe demo fallback.
     func arbitraryTargetLanguageFallsBackToTraditionalChinese(
         targetLanguage: String
     ) async throws {
@@ -105,6 +113,7 @@ struct MockVisionProviderTests {
         "Free-text values containing an English token use the English demo projection",
         arguments: ["British English", "English (UK)"]
     )
+    /// Confirms free-text settings containing “English” select the English sample menu.
     func englishTokenUsesEnglishProjection(targetLanguage: String) async throws {
         let menu = try await provider.extractMenu(
             images: [],
@@ -123,6 +132,7 @@ struct MockVisionProviderTests {
     }
 
     @Test("Dish explanation follows the requested target language")
+    /// Confirms demo dish explanations use the same language choice as menu translation.
     func explanationLanguage() async throws {
         let english = try await provider.explainDish(
             original: "唐揚げ",
@@ -139,6 +149,7 @@ struct MockVisionProviderTests {
     }
 
     @Test("Fixture is deterministic regardless of image bytes")
+    /// Confirms Demo Mode always returns the same menu and never interprets photo contents.
     func deterministicFixture() async throws {
         let first = try await provider.extractMenu(
             images: [],

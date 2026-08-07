@@ -1,17 +1,26 @@
+// Verifies how editable menu sessions become immutable completed bills, including
+// migration fallbacks, calculation capture, repeated finalization, and failures.
+
 import Foundation
 import SwiftData
 import Testing
 @testable import Menuscript
 
+/// Protects the lifecycle contract that only a successfully saved, non-empty
+/// order becomes completed and that its captured receipt never changes afterward.
 @MainActor
 @Suite("Session lifecycle and bill snapshots")
 struct SessionLifecycleTests {
+    /// A predictable test-only error used to simulate a database save failure
+    /// without damaging or depending on real persistent storage.
     private enum InjectedFailure: Error, LocalizedError {
         case save
 
+        /// Supplies stable text so the test can verify the user-facing error wrapper.
         var errorDescription: String? { "injected save failure" }
     }
 
+    /// Creates a fresh in-memory database, isolating each scenario from real menu history.
     private func makeContext() throws -> ModelContext {
         let configuration = ModelConfiguration(
             schema: AppSchema.current,
@@ -24,6 +33,8 @@ struct SessionLifecycleTests {
         return ModelContext(container)
     }
 
+    /// Builds a realistic draft containing priced, market-price, and unselected
+    /// dishes so one sample order exercises the important snapshot rules together.
     private func makeOrder() -> MenuSession {
         let session = MenuSession(
             title: "Final dinner",
@@ -69,6 +80,8 @@ struct SessionLifecycleTests {
         return session
     }
 
+    /// Ensures new drafts and older or unknown stored values remain unfinished;
+    /// this prevents an app update from falsely presenting an editable order as final.
     @Test("New, legacy, and unknown lifecycle values stay distinguishable")
     func lifecycleDefaultsAndLegacyFallback() {
         let draft = makeOrder()
@@ -89,6 +102,8 @@ struct SessionLifecycleTests {
         #expect(legacy.lifecycleStatus == .legacyUnfinalized)
     }
 
+    /// Verifies finalization freezes every displayed value, keeps selected unpriced
+    /// dishes visible, excludes their unknown price from totals, and omits unselected dishes.
     @Test("Finalizing captures every displayed value and excludes unpriced lines from totals")
     func draftToCompletedSnapshot() throws {
         let context = try makeContext()
@@ -132,6 +147,8 @@ struct SessionLifecycleTests {
         #expect(snapshot.completedAt == completedAt)
     }
 
+    /// Ensures tapping Finish more than once neither saves again nor rewrites the
+    /// original receipt with later edits, preserving a trustworthy completed bill.
     @Test("Finalizing twice is idempotent and later model edits cannot change the snapshot")
     func finalizeIsIdempotentAndImmutable() throws {
         let context = try makeContext()
@@ -175,6 +192,8 @@ struct SessionLifecycleTests {
         #expect(first.completedAt == Date(timeIntervalSince1970: 10))
     }
 
+    /// Simulates a failed database save and verifies the session returns fully to
+    /// draft state instead of showing a completed bill that was never persisted.
     @Test("A failed finalize save restores draft status and snapshot bytes")
     func finalizeSaveFailureRollsBackLifecycle() throws {
         let context = try makeContext()
@@ -199,6 +218,8 @@ struct SessionLifecycleTests {
         #expect(session.billSnapshot == nil)
     }
 
+    /// Prevents an order with no selected dishes from being marked completed,
+    /// which would otherwise create an empty and misleading receipt.
     @Test("An empty order cannot be marked completed")
     func emptyOrderDoesNotFinalize() throws {
         let context = try makeContext()

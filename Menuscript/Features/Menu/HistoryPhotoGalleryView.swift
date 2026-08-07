@@ -1,3 +1,6 @@
+// Presents persisted menu photos as a memory-conscious, accessible paged gallery
+// with UIKit-powered pinch and double-tap zoom.
+
 import SwiftUI
 import UIKit
 
@@ -6,14 +9,18 @@ import UIKit
 struct HistoryPhotoGalleryModel {
     let photos: [Data]
 
+    /// Number of persisted pages available to the gallery.
     var pageCount: Int { photos.count }
+    /// True when the session has no photo data to display.
     var isEmpty: Bool { photos.isEmpty }
 
+    /// Safely returns page bytes and treats an out-of-range request as missing.
     func data(at index: Int) -> Data? {
         guard photos.indices.contains(index) else { return nil }
         return photos[index]
     }
 
+    /// Decodes one requested page on demand instead of retaining all images.
     func image(at index: Int) -> UIImage? {
         data(at: index).flatMap(UIImage.init(data:))
     }
@@ -28,10 +35,12 @@ struct HistoryPhotoGalleryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPage = 0
 
+    /// Adapts raw photo data to the small model used throughout the view.
     private var model: HistoryPhotoGalleryModel {
         HistoryPhotoGalleryModel(photos: photos)
     }
 
+    /// Composes the empty state or gallery inside a dismissible navigation sheet.
     var body: some View {
         NavigationStack {
             Group {
@@ -52,6 +61,7 @@ struct HistoryPhotoGalleryView: View {
         }
     }
 
+    /// Builds a lazy page-style viewer with a separate, accessible page counter.
     private var gallery: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedPage) {
@@ -88,6 +98,8 @@ private struct LazyHistoryPhotoPage: View {
     @State private var image: UIImage?
     @State private var didAttemptDecode = false
 
+    /// Decodes only when this page appears, distinguishes corrupt data from
+    /// loading, and releases the decoded image when the page leaves the screen.
     var body: some View {
         Group {
             if let image {
@@ -125,14 +137,19 @@ private struct LazyHistoryPhotoPage: View {
     }
 }
 
+/// Bridges one image into a zoomable `UIScrollView`, which supplies mature
+/// pinch behavior not available from the surrounding SwiftUI page view.
 private struct ZoomableHistoryImage: UIViewRepresentable {
     let image: UIImage
     let accessibilityText: String
 
+    /// Creates the delegate and retains UIKit controls shared across updates.
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
+    /// Builds the zoomable scroll view, constrains its image to the viewport,
+    /// and installs a double-tap shortcut between normal and enlarged scales.
     func makeUIView(context: Context) -> UIScrollView {
         let scrollView = UIScrollView()
         scrollView.backgroundColor = .black
@@ -162,19 +179,24 @@ private struct ZoomableHistoryImage: UIViewRepresentable {
         return scrollView
     }
 
+    /// Updates image and accessibility text when SwiftUI inputs change without
+    /// rebuilding the scroll view or losing its zoom behavior.
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.imageView.image = image
         context.coordinator.imageView.accessibilityLabel = accessibilityText
     }
 
+    /// Owns the UIKit image view and implements all zoom delegate behavior.
     final class Coordinator: NSObject, UIScrollViewDelegate {
         let imageView = UIImageView()
         weak var scrollView: UIScrollView?
 
+        /// Identifies the image view as the only content that should zoom.
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             imageView
         }
 
+        /// Toggles between the full image and a useful 3× detail view.
         @objc func doubleTapped() {
             guard let scrollView else { return }
             scrollView.setZoomScale(scrollView.zoomScale > 1 ? 1 : 3, animated: true)

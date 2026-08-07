@@ -1,9 +1,10 @@
+// Defines the allergen vocabulary shared by settings, AI prompts, saved values,
+// and the interface, keeping those representations stable but independently editable.
+
 import Foundation
 
-/// 食物敏感原。rawValue 係穩定 slug，用嚟落 `@AppStorage`（comma-joined）
-/// 同做 `Identifiable` id；`promptLabel` 係送俾 AI 嘅穩定英文合約字串；
-/// `displayName` 先跟 app 內語言設定顯示。三者刻意分開，改 UI 名唔會影響
-/// 儲存值同 prompt 合約。
+/// A supported food allergen. Its stored slug, AI-facing label, and localized
+/// display name are deliberately separate so wording changes do not corrupt data.
 enum Allergen: String, CaseIterable, Identifiable, Sendable {
     case peanut = "peanut"
     case treeNuts = "treeNuts"
@@ -17,11 +18,11 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
     case gluten = "gluten"
     case molluscs = "molluscs"
 
+    /// Uses the stored slug as the stable identity shown in settings lists.
     var id: String { rawValue }
 
-    /// 送俾 AI 嘅穩定英文標籤，唔跟 UI 語言變。prompt 送呢啲字串入去，
-    /// AI 回傳嘅 `possibleAllergens` 亦要 verbatim 用返呢啲字串——係兩邊嘅合約，
-    /// 唔可以改。
+    /// Returns the fixed English label exchanged with the AI. These exact values
+    /// form a contract with `possibleAllergens` and must not follow the UI language.
     var promptLabel: String {
         switch self {
         case .peanut: return "peanut"
@@ -38,7 +39,7 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// 跟 app 內語言設定顯示嘅名（經 `L10n`）。
+    /// Returns the allergen name in the language selected inside the app.
     var displayName: String {
         switch self {
         case .peanut: return L10n.string("花生")
@@ -55,11 +56,9 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// 將 Settings 儲存嘅 preset slug 同自訂自由文字，砌成送俾 AI 嘅 label 清單。
-    /// 純函數：`presets` 按 "," 拆、slug→`promptLabel`（唔識嘅 slug 掉咗）；
-    /// `custom` 按 `,`／`、`／換行拆、trim、去空。preset 行先，之後 case-insensitive
-    /// dedupe（保留首次出現），最後 cap：會令 joined 總長超 200 字元嘅項跳過（唔截半條），
-    /// 後面啱長度嘅照保留——一條過長嘅自訂項唔會餓死之後嘅敏感原。
+    /// Combines saved presets and free text into a clean AI prompt list. It drops
+    /// unknown presets, removes duplicates, and skips entries that would exceed
+    /// the 200-character limit without cutting a warning in half.
     static func parse(presets: String, custom: String) -> [String] {
         let presetLabels = presets
             .split(separator: ",", omittingEmptySubsequences: true)
@@ -92,8 +91,7 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
         return kept
     }
 
-    /// 由 comma-joined 嘅 preset 字串攞返已揀 slug 集合（trim、去空）。
-    /// Settings toggle binding 用嚟判斷邊個係開。
+    /// Turns the comma-separated setting into a trimmed set used by preset toggles.
     static func selectedSlugs(_ presets: String) -> Set<String> {
         Set(
             presets
@@ -103,8 +101,8 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
         )
     }
 
-    /// 將已揀 slug 集合寫返做 comma-joined 字串，次序固定跟 `allCases`，
-    /// 順手隔走唔識嘅 slug。Settings toggle binding 用嚟寫返 `@AppStorage`。
+    /// Writes selected slugs in a predictable order and ignores values the app
+    /// does not recognize, producing the compact setting stored in `UserDefaults`.
     static func serialize(_ slugs: Set<String>) -> String {
         allCases
             .filter { slugs.contains($0.rawValue) }
@@ -112,9 +110,8 @@ enum Allergen: String, CaseIterable, Identifiable, Sendable {
             .joined(separator: ",")
     }
 
-    /// 將 AI 回傳嘅一個 allergen 字串轉成顯示名：trim 後 case-insensitive 對返
-    /// `promptLabel`，對中就用嗰個 allergen 嘅 `displayName`；對唔中就原樣（trim 後）
-    /// 顯示，唔會靜靜跌咗個警示。
+    /// Converts one AI-returned label to a localized known allergen. Unknown
+    /// labels stay visible after trimming so a possible warning is never hidden.
     static func displayLabel(for hit: String) -> String {
         let trimmed = hit.trimmingCharacters(in: .whitespacesAndNewlines)
         if let match = allCases.first(where: {

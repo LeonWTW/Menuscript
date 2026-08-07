@@ -1,8 +1,12 @@
+// Verifies dish names become safe Google Images search URLs without losing international text.
+// These tests inspect URL components directly, so no browser or network request is needed.
+
 import Foundation
 import Testing
 @testable import Menuscript
 
 @Suite("PhotoSearch")
+/// Protects the search destination, required query flags, input trimming, and percent encoding.
 struct PhotoSearchTests {
 
     /// Re-parses a built URL so assertions read the actual wire form, not the
@@ -12,11 +16,13 @@ struct PhotoSearchTests {
         return try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
     }
 
+    /// Reads one decoded query value by name to keep URL assertions easy to understand.
     private func value(_ name: String, in components: URLComponents) -> String? {
         components.queryItems?.first { $0.name == name }?.value
     }
 
     @Test("Builds an https www.google.com /search URL")
+    /// Confirms searches use Google's secure web-search endpoint.
     func schemeHostPath() throws {
         let components = try parsedComponents(for: "ramen")
         #expect(components.scheme == "https")
@@ -25,6 +31,7 @@ struct PhotoSearchTests {
     }
 
     @Test("Query carries the search term as q and the image-search flag tbm=isch")
+    /// Confirms the dish name and image-only mode are sent as separate query fields.
     func queryItemsCarryTermAndImageFlag() throws {
         let components = try parsedComponents(for: "ramen")
         #expect(value("q", in: components) == "ramen")
@@ -32,6 +39,7 @@ struct PhotoSearchTests {
     }
 
     @Test("CJK dish name percent-encodes: round-trips intact and leaks no raw CJK scalars")
+    /// Confirms Chinese dish names survive URL encoding while the transmitted query remains valid ASCII.
     func cjkPercentEncoded() throws {
         let dish = "宮保雞丁"
         let components = try parsedComponents(for: dish)
@@ -48,11 +56,13 @@ struct PhotoSearchTests {
     }
 
     @Test("Blank queries produce no URL", arguments: ["", "  ", "\n", " \t\n "])
+    /// Confirms blank input is rejected instead of opening a meaningless search page.
     func blankQueryIsNil(input: String) {
         #expect(PhotoSearch.imagesURL(query: input) == nil)
     }
 
     @Test("Ampersand and equals in the term round-trip through query items")
+    /// Confirms punctuation inside a dish name cannot accidentally create or alter query fields.
     func ampersandAndEqualsRoundTrip() throws {
         let dish = "fish & chips = good"
         let components = try parsedComponents(for: dish)
@@ -63,6 +73,7 @@ struct PhotoSearchTests {
     }
 
     @Test("Leading and trailing whitespace is trimmed from the term")
+    /// Confirms accidental surrounding spaces are removed before searching.
     func trimsSurroundingWhitespace() throws {
         let components = try parsedComponents(for: "  udon  ")
         #expect(value("q", in: components) == "udon")

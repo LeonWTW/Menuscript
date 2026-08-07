@@ -1,21 +1,27 @@
+// Verifies the exact Gemini requests built for menu extraction and dish explanations.
+// These tests inspect serialized requests directly, protecting privacy and API contracts without making network calls.
+
 import XCTest
 @testable import Menuscript
 
-/// Tests for `GeminiProvider.buildExtractRequest` / `buildExplainRequest` — pure functions, no network.
+/// Tests the provider's pure request-building boundary, including URLs, headers, prompts, schemas, and size limits.
 final class GeminiRequestTests: XCTestCase {
 
     private let imageA = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x01])
     private let imageB = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x02])
 
+    /// Creates a provider with a controllable key so missing, padded, and normal credentials can be tested safely.
     private func makeProvider(key: String? = "test-key-123") -> GeminiProvider {
         GeminiProvider(apiKey: { key })
     }
 
+    /// Decodes a request's JSON body into a dictionary for focused structural assertions.
     private func bodyJSON(of request: URLRequest) throws -> [String: Any] {
         let data = try XCTUnwrap(request.httpBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    /// Extracts the single user turn's ordered image and prompt parts, also guarding against accidental extra turns.
     private func parts(of request: URLRequest) throws -> [[String: Any]] {
         let body = try bodyJSON(of: request)
         let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
@@ -23,12 +29,12 @@ final class GeminiRequestTests: XCTestCase {
         return try XCTUnwrap(contents[0]["parts"] as? [[String: Any]])
     }
 
-    /// The prompt text (last part) of an extract request.
+    /// Returns the final prompt text after the image parts of an extraction request.
     private func promptText(of request: URLRequest) throws -> String {
         try XCTUnwrap(try parts(of: request).last?["text"] as? String)
     }
 
-    /// Navigates body → generationConfig.responseSchema → items.items (the per-dish OBJECT schema).
+    /// Navigates the nested response schema and returns the rules Gemini must follow for each dish.
     private func itemSchema(of request: URLRequest) throws -> [String: Any] {
         let body = try bodyJSON(of: request)
         let config = try XCTUnwrap(body["generationConfig"] as? [String: Any])
@@ -38,6 +44,7 @@ final class GeminiRequestTests: XCTestCase {
         return try XCTUnwrap(itemsSchema["items"] as? [String: Any])
     }
 
+    /// Confirms extraction targets the selected default model's generate-content endpoint with an HTTP POST.
     func testURLContainsModelIdAndGenerateContent() throws {
         let request = try makeProvider().buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")
         let url = try XCTUnwrap(request.url?.absoluteString)
@@ -48,12 +55,14 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
     }
 
+    /// Ensures a model chosen in Settings replaces the default model in the endpoint path.
     func testCustomModelIdAppearsInURL() throws {
         let provider = GeminiProvider(apiKey: { "k" }, model: "gemini-2.5-pro")
         let request = try provider.buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")
         XCTAssertTrue(try XCTUnwrap(request.url?.absoluteString).contains("gemini-2.5-pro"))
     }
 
+    /// Protects the API key by requiring a header and forbidding URL or query-string exposure.
     func testAPIKeyInHeaderOnlyNeverInURL() throws {
         let request = try makeProvider(key: "test-key-123").buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")
 
@@ -65,6 +74,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertNil(URLComponents(string: url)?.queryItems)
     }
 
+    /// Confirms harmless surrounding whitespace is removed before the key enters its secure header.
     func testAPIKeyIsTrimmedBeforeEnteringHeader() throws {
         let request = try makeProvider(key: " \n test-key-123 \t").buildExtractRequest(
             images: [imageA],
@@ -77,6 +87,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(request.url?.absoluteString).contains("test-key-123"))
     }
 
+    /// Verifies body-size enforcement happens after base64 and JSON overhead, preventing oversized uploads.
     func testFinalSerializedBodyCannotExceed18MB() {
         XCTAssertEqual(GeminiProvider.maximumRequestBodyBytes, 18_000_000)
         // Base64 expands 13.5 MB to exactly 18 MB before JSON/prompt overhead,
@@ -90,6 +101,7 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// Defines the byte boundary exactly: the limit is accepted and the next byte is rejected.
     func testSerializedBodyBoundaryAllowsExactly18MBAndRejectsOneByteMore() throws {
         let exactLimit = Data(count: GeminiProvider.maximumRequestBodyBytes)
         XCTAssertEqual(
@@ -105,6 +117,7 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// Ensures every selected photo is included once, followed by one target-language instruction.
     func testBodyHasOneInlineDataPartPerImagePlusOneTextPart() throws {
         let request = try makeProvider().buildExtractRequest(images: [imageA, imageB], targetLanguage: "繁體中文")
         let parts = try parts(of: request)
@@ -122,6 +135,8 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertNil(parts[2]["inline_data"])
     }
 
+    /// Guards structured JSON output and string-based prices so money can later be
+    /// parsed without floating-point rounding loss.
     func testGenerationConfigRequestsStructuredJSON() throws {
         let request = try makeProvider().buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")
         let body = try bodyJSON(of: request)
@@ -143,6 +158,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertEqual(priceSchema["type"] as? String, "STRING", "price rides the wire as STRING and is parsed to Decimal in Swift")
     }
 
+    /// Ensures absent or blank credentials fail during request construction, before any network action is possible.
     func testMissingAPIKeyThrownBeforeAnyNetwork() {
         XCTAssertThrowsError(try makeProvider(key: nil).buildExtractRequest(images: [imageA], targetLanguage: "繁體中文")) { error in
             XCTAssertEqual(error as? VisionProviderError, .missingAPIKey)
@@ -156,12 +172,14 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// Rejects an extraction with no photos because Gemini cannot produce a trustworthy menu from empty input.
     func testEmptyImagesThrowsInvalidImage() {
         XCTAssertThrowsError(try makeProvider().buildExtractRequest(images: [], targetLanguage: "繁體中文")) { error in
             XCTAssertEqual(error as? VisionProviderError, .invalidImage)
         }
     }
 
+    /// Confirms a one-time retry adds precise correction guidance to the otherwise unchanged extraction prompt.
     func testCorrectiveSuffixIsAppendedToPromptOnRetryBuild() throws {
         let suffix = "Your previous output failed to parse: missing key 'items' at root. Return ONLY valid JSON matching the schema."
         let request = try makeProvider().buildExtractRequest(
@@ -176,6 +194,8 @@ final class GeminiRequestTests: XCTestCase {
 
     // MARK: - Allergen & summary extraction contract
 
+    /// Includes allergen guidance only when requested while preserving the user's exact
+    /// terms and supporting menu notes.
     func testAllergenRuleAndListPresentOnlyWhenAllergensNonEmpty() throws {
         let withAllergens = try makeProvider().buildExtractRequest(
             images: [imageA], targetLanguage: "繁體中文", allergens: ["peanut", "soy"]
@@ -197,6 +217,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertFalse(promptWithout.contains("possibleAllergens"), "no allergen field mentioned when the list is empty")
     }
 
+    /// Requires a short dish summary whether or not allergen guidance is also requested.
     func testSummaryRuleAlwaysPresentRegardlessOfAllergens() throws {
         for allergens in [[], ["peanut"]] as [[String]] {
             let request = try makeProvider().buildExtractRequest(
@@ -207,6 +228,7 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// Ensures the structured schema marks summary as both defined and mandatory in every extraction mode.
     func testItemSchemaAlwaysHasSummaryInPropertiesAndRequired() throws {
         for allergens in [[], ["peanut"]] as [[String]] {
             let request = try makeProvider().buildExtractRequest(
@@ -221,6 +243,7 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// Keeps the allergen field required when relevant and absent otherwise, matching the prompt and parser contract.
     func testItemSchemaHasPossibleAllergensOnlyWhenAllergensNonEmpty() throws {
         let withItem = try itemSchema(of: makeProvider().buildExtractRequest(
             images: [imageA], targetLanguage: "繁體中文", allergens: ["peanut"]
@@ -238,6 +261,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(withoutItem["required"] as? [String]).contains("possibleAllergens"))
     }
 
+    /// Prevents a corrective retry from dropping either the user's allergen list or its matching response field.
     func testAllergensAndCorrectiveSuffixCoexistInRebuild() throws {
         // Guards the corrective-retry path: rebuilding with a suffix must NOT drop allergens.
         let suffix = "Your previous output failed to parse: missing key 'items' at root. Return ONLY valid JSON matching the schema."
@@ -252,6 +276,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertNotNil(properties["possibleAllergens"], "allergen schema survives the corrective rebuild")
     }
 
+    /// Confirms dish explanations mention the source and target languages and request plain text instead of menu JSON.
     func testExplainRequestIsPlainTextWithDishAndLanguages() throws {
         let request = try makeProvider().buildExplainRequest(original: "焼き鳥", language: "日文", targetLanguage: "繁體中文")
 

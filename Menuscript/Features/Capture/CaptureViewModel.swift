@@ -1,3 +1,6 @@
+// Owns capture-screen state and coordinates image preparation, recognition,
+// service selection, and persistence so the SwiftUI view only renders state.
+
 import Foundation
 import Observation
 import SwiftData
@@ -10,6 +13,8 @@ private struct SendablePreparationImage: @unchecked Sendable {
     let image: UIImage
 }
 
+/// Pairs a reserved photo slot with the image that will be prepared for it.
+/// Keeping the ID with the work lets results return in any order safely.
 private struct PhotoPreparationRequest: Sendable {
     let id: UUID
     let image: SendablePreparationImage
@@ -22,8 +27,12 @@ private struct PhotoPreparationRequest: Sendable {
 @Observable
 @MainActor
 final class CaptureViewModel: Identifiable {
+    /// Supplies runtime services at the moment recognition starts, which keeps
+    /// settings-driven production behavior replaceable in tests.
     typealias RuntimeResolver = @MainActor () throws -> RuntimeServices?
+    /// Saves a model context; replaceable so tests can simulate save failures.
     typealias ContextSave = @MainActor (ModelContext) throws -> Void
+    /// Compresses one image into the preview and JPEG data sent for recognition.
     typealias PhotoPreparer = @Sendable (UIImage) -> ImagePrep.PreparedPhoto?
 
     static let liveDisclosureAcceptedKey = "privacy.googleGeminiDisclosureAccepted.v1"
@@ -37,6 +46,8 @@ final class CaptureViewModel: Identifiable {
     var needsLiveDisclosure: Bool = false
     var completedSession: MenuSession? = nil
 
+    /// True only when every staged photo is ready and no recognition is running.
+    /// This central rule prevents partial or duplicate submissions.
     var canRecognize: Bool {
         !photos.isEmpty
             && pendingPhotoCount == 0
@@ -55,14 +66,17 @@ final class CaptureViewModel: Identifiable {
             && !isRecognizing
     }
 
+    /// Number of additional slots available before the shared photo limit.
     var remainingPhotoCapacity: Int {
         max(0, CaptureLimits.maxPhotoCount - photos.count)
     }
 
+    /// Counts imports that still need to finish preparing their image data.
     var pendingPhotoCount: Int {
         photos.lazy.filter(\.isPending).count
     }
 
+    /// Counts photos that cannot be sent until the user replaces them.
     var failedPhotoCount: Int {
         photos.lazy.filter { $0.failure != nil }.count
     }
@@ -79,6 +93,8 @@ final class CaptureViewModel: Identifiable {
     private let saveContext: ContextSave
     private var recognizeTask: Task<Void, Never>?
 
+    /// Creates the workflow with production dependencies by default and allows
+    /// focused substitutes for previews and tests without branching the logic.
     init(
         modelContext: ModelContext,
         provider: MenuVisionProvider? = nil,
@@ -154,12 +170,16 @@ final class CaptureViewModel: Identifiable {
         )
     }
 
+    /// Removes a photo by its current grid position and clears any issue that
+    /// the removal has resolved. Invalid positions are ignored safely.
     func removePhoto(at index: Int) {
         guard photos.indices.contains(index) else { return }
         photos.remove(at: index)
         reconcileCaptureIssue()
     }
 
+    /// Removes the stable photo slot with `id`, which is safer while imports
+    /// may finish asynchronously and change the array's contents.
     func removePhoto(id: UUID) {
         photos.removeAll { $0.id == id }
         reconcileCaptureIssue()
@@ -183,6 +203,8 @@ final class CaptureViewModel: Identifiable {
         return PhotoReservation(ids: ids, rejected: rejectedCount)
     }
 
+    /// Applies a preparation result only to its still-pending reserved slot.
+    /// Success stores JPEG data safe for background work; failure stays visible.
     func resolvePhotoSlot(
         id: UUID,
         with result: Result<ImagePrep.PreparedPhoto, CapturedPhotoFailure>
@@ -205,13 +227,15 @@ final class CaptureViewModel: Identifiable {
         }
     }
 
+    /// Discards unresolved placeholders, normally after their import tasks are
+    /// cancelled, while preserving photos that already reached a final state.
     func removePendingPhotoSlots() {
         photos.removeAll { $0.isPending }
         reconcileCaptureIssue()
     }
 
     /// Starts `recognize()` as a task owned by this view model, so a later
-    /// `cancelRecognize()` call (e.g. the user tapping 取消) can actually
+    /// `cancelRecognize()` call (for example, the user tapping Cancel) can actually
     /// interrupt the in-flight request instead of merely dismissing the UI.
     func startRecognize() {
         guard canRecognize else { return }
@@ -228,21 +252,28 @@ final class CaptureViewModel: Identifiable {
         recognizeTask = nil
     }
 
+    /// Records the one-time consent for live Gemini requests and closes the
+    /// disclosure so the caller can retry the pending recognition.
     func acceptLiveDisclosure() {
         defaults.set(true, forKey: Self.liveDisclosureAcceptedKey)
         needsLiveDisclosure = false
     }
 
+    /// Closes the live-service disclosure without recording consent.
     func cancelLiveDisclosure() {
         needsLiveDisclosure = false
     }
 
+    /// Resets provider-specific error state after an alert is dismissed.
     func clearProviderError() {
         errorMessage = nil
         recoveryAction = nil
         needsAPIKey = false
     }
 
+    /// Runs the complete recognition transaction: validates all photos, resolves
+    /// services and settings, calls vision/FX providers, then saves one session.
+    /// Cancellation and save failure exit without leaving a partial session.
     func recognize() async {
         guard !isRecognizing, !photos.isEmpty else { return }
         guard pendingPhotoCount == 0 else {
@@ -413,6 +444,8 @@ final class CaptureViewModel: Identifiable {
         modelContext.processPendingChanges()
     }
 
+    /// Selects injected services for tests or resolves the current production
+    /// mode from Settings. The returned flag says whether consent is required.
     private func resolvedRuntime() throws -> (
         services: RuntimeServices,
         requiresDisclosure: Bool
@@ -429,9 +462,9 @@ final class CaptureViewModel: Identifiable {
             if let injectedFXProvider {
                 fxProvider = injectedFXProvider
             } else {
-                // An injected vision provider is a test/preview seam. Keep
-                // it hermetic unless its caller explicitly opts into an FX
-                // dependency, regardless of the inferred provenance mode.
+                // Injected vision providers are used by tests and previews.
+                // Keep them fully offline unless the caller explicitly supplies
+                // an FX provider, regardless of the provider mode being tested.
                 fxProvider = MockFXService()
             }
             return (
@@ -454,12 +487,15 @@ final class CaptureViewModel: Identifiable {
         return (services, true)
     }
 
+    /// Converts a known vision-provider failure into alert and recovery state.
     private func handleProviderError(_ error: VisionProviderError) {
         errorMessage = error.errorDescription
         recoveryAction = error.recoveryAction
         needsAPIKey = error.requiresAPIKeyUpdate
     }
 
+    /// Presents runtime setup failures without exposing storage implementation
+    /// details, while retaining a specific message for known Keychain errors.
     private func handleRuntimeResolutionError(_ error: Error) {
         if let keychainError = error as? KeychainError {
             errorMessage = keychainError.errorDescription
@@ -470,6 +506,8 @@ final class CaptureViewModel: Identifiable {
         needsAPIKey = false
     }
 
+    /// Clears a capture warning once its underlying condition no longer exists.
+    /// Unrelated warnings stay visible until explicitly handled.
     private func reconcileCaptureIssue() {
         switch captureIssue {
         case .photoLimitExceeded where remainingPhotoCapacity > 0:

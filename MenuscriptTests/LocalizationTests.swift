@@ -1,3 +1,6 @@
+// Verifies every user-facing string is translated completely and keeps compatible format placeholders.
+// It also checks that the in-app language preference resolves safely without using the host machine's settings.
+
 import Foundation
 import Testing
 @testable import Menuscript
@@ -7,9 +10,10 @@ import Testing
 /// Guards the app's localization strategy: zh-Hant literals are the keys,
 /// and every key must carry explicit en AND zh-Hant entries. The explicit
 /// zh-Hant entry is what makes Xcode emit zh-Hant.lproj at all — without it,
-/// L10n's bundle lookup breaks for "English system + in-app 繁中".
+/// L10n's bundle lookup breaks for an English system using in-app Traditional Chinese.
 @Suite("String catalog completeness")
 struct StringCatalogTests {
+    /// Describes one formatted value by argument order and value type so translations can be compared safely.
     private struct FormatArgument: Equatable {
         let position: Int
         let type: String
@@ -20,6 +24,7 @@ struct StringCatalogTests {
         "Menuscript/Resources/InfoPlist.xcstrings",
     ]
 
+    /// Locates the repository from this source file instead of assuming tests run in a particular directory.
     private static func repoRoot() -> URL {
         // #filePath = <repo>/MenuscriptTests/LocalizationTests.swift
         URL(fileURLWithPath: #filePath)
@@ -27,6 +32,7 @@ struct StringCatalogTests {
             .deletingLastPathComponent()
     }
 
+    /// Loads one Xcode string catalog as JSON for structural and translation checks.
     private func loadCatalog(_ relativePath: String) throws -> [String: Any] {
         let url = Self.repoRoot().appendingPathComponent(relativePath)
         let data = try Data(contentsOf: url)
@@ -63,6 +69,7 @@ struct StringCatalogTests {
         }
     }
 
+    /// Collects every translated string, including plural or device-specific variation leaves.
     private func localizedLeafValues(in value: Any) -> [String] {
         guard let dictionary = value as? [String: Any] else {
             if let array = value as? [Any] {
@@ -112,6 +119,7 @@ struct StringCatalogTests {
     }
 
     @Test("Every key has translated en and zh-Hant entries", arguments: catalogPaths)
+    /// Confirms both catalogs explicitly translate every key into English and Traditional Chinese.
     func everyKeyFullyLocalized(relativePath: String) throws {
         let catalog = try loadCatalog(relativePath)
         #expect(catalog["sourceLanguage"] as? String == "zh-Hant")
@@ -136,6 +144,7 @@ struct StringCatalogTests {
     }
 
     @Test("Localized format placeholders preserve argument positions and types", arguments: catalogPaths)
+    /// Confirms translations cannot reorder or change formatted values in a way that would crash or mislabel text.
     func localizedFormatArgumentsMatchSource(relativePath: String) throws {
         let catalog = try loadCatalog(relativePath)
         let strings = try #require(catalog["strings"] as? [String: Any], "no strings dict")
@@ -162,18 +171,21 @@ struct StringCatalogTests {
 // MARK: - AppLanguage
 
 @Suite("AppLanguage")
+/// Protects stored-language fallback behavior and the locale values applied to SwiftUI.
 struct AppLanguageTests {
     // Isolated per test instance; never touches UserDefaults.standard
     // (Swift Testing runs in parallel — .standard would race).
     private let suiteName = "test.applanguage.\(UUID().uuidString)"
     private let defaults: UserDefaults
 
+    /// Creates an isolated preference domain because Swift Testing may run cases in parallel.
     init() throws {
         defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
     }
 
     @Test("Unset defaults resolve to .system")
+    /// Confirms a new installation follows the device language until the user chooses otherwise.
     func unsetResolvesToSystem() {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         #expect(AppLanguage.resolve(from: defaults) == .system)
@@ -184,6 +196,7 @@ struct AppLanguageTests {
         ("en", AppLanguage.english),
         ("system", AppLanguage.system),
     ])
+    /// Confirms each valid stored identifier restores its matching language choice.
     func storedValueResolves(raw: String, expected: AppLanguage) {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(raw, forKey: SettingsKeys.appLanguage)
@@ -191,6 +204,7 @@ struct AppLanguageTests {
     }
 
     @Test("Garbage stored value falls back to .system")
+    /// Confirms outdated or corrupt preference text safely falls back to the device language.
     func garbageResolvesToSystem() {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set("klingon-XX", forKey: SettingsKeys.appLanguage)
@@ -198,6 +212,7 @@ struct AppLanguageTests {
     }
 
     @Test("locale mapping: system is nil, explicit languages map to identifiers")
+    /// Confirms explicit choices force the intended locale while system mode leaves localization to iOS.
     func localeMapping() {
         #expect(AppLanguage.system.locale == nil)
         #expect(AppLanguage.zhHant.locale?.identifier == "zh-Hant")

@@ -1,3 +1,6 @@
+// Presents user preferences, secure API-key management, manual FX overrides,
+// and destructive history controls while delegating storage to focused services.
+
 import SwiftData
 import SwiftUI
 
@@ -28,10 +31,13 @@ struct SettingsView: View {
     private let onDeleteAllSucceeded: () -> Void
     private let commonCurrencies = ["USD", "HKD", "TWD", "JPY", "EUR", "GBP", "CNY"]
 
+    /// Reads the marketing version from the app bundle for a simple footer display.
     private var appVersionString: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
     }
 
+    /// Creates Settings with secure and FX storage dependencies that can be
+    /// replaced in tests while production defaults remain convenient.
     init(
         secretStore: any SecretStore = KeychainStore(),
         fxOverrideStore: any FXManualOverrideStoring = FXManualOverrideStore(),
@@ -44,6 +50,8 @@ struct SettingsView: View {
         self.onDeleteAllSucceeded = onDeleteAllSucceeded
     }
 
+    /// Organizes settings by user purpose and binds simple preferences directly
+    /// to persistent storage while routing complex actions through helper models.
     var body: some View {
         @Bindable var keyState = apiKeyState
         Form {
@@ -189,6 +197,7 @@ struct SettingsView: View {
         }
     }
 
+    /// Maps each stored app-language choice to its human-readable picker label.
     @ViewBuilder
     private func languageLabel(for language: AppLanguage) -> some View {
         switch language {
@@ -218,27 +227,32 @@ struct SettingsView: View {
         )
     }
 
+    /// Validates positive numeric rate input plus two three-letter currency codes.
     private var isValidFXOverrideInput: Bool {
         guard let rate = Double(fxRateInput), rate.isFinite, rate > 0 else { return false }
         return isValidCurrencyCode(fxFromCode) && isValidCurrencyCode(fxToCode)
     }
 
+    /// Accepts only a trimmed ISO-style three-letter alphabetic currency code.
     private func isValidCurrencyCode(_ code: String) -> Bool {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         return trimmed.range(of: "^[A-Z]{3}$", options: .regularExpression) != nil
     }
 
+    /// Persists the entered rate only after the complete override form is valid.
     private func saveFXOverride() {
         guard isValidFXOverrideInput, let rate = Double(fxRateInput) else { return }
         fxOverrideStore.setManualOverride(rate, from: fxFromCode, to: fxToCode)
     }
 
+    /// Removes the override for the entered currency pair and clears its rate field.
     private func clearFXOverride() {
         guard !fxFromCode.isEmpty, !fxToCode.isEmpty else { return }
         fxOverrideStore.setManualOverride(nil, from: fxFromCode, to: fxToCode)
         fxRateInput = ""
     }
 
+    /// Bridges an optional persistence failure to SwiftUI's Boolean alert API.
     private var persistenceErrorBinding: Binding<Bool> {
         Binding(
             get: { persistenceErrorMessage != nil },
@@ -246,6 +260,8 @@ struct SettingsView: View {
         )
     }
 
+    /// Deletes all saved menu sessions, dismisses only after success, and lets
+    /// the presenting flow reset any now-invalid navigation state.
     private func deleteAllSessions() {
         do {
             try SettingsDeleteAllFlow.perform(

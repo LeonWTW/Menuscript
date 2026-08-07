@@ -1,3 +1,6 @@
+// Verifies users can delete one or all saved menus without leaving detached dish records behind.
+// Every case uses temporary in-memory SwiftData storage rather than the user's real history.
+
 import Foundation
 import Testing
 import SwiftData
@@ -5,8 +8,10 @@ import SwiftData
 
 @MainActor
 @Suite("HistoryDelete")
+/// Protects single-session and full-history deletion behavior, including cascade rules.
 struct HistoryDeleteTests {
 
+    /// Creates an isolated persistence context containing the same two model types as the app.
     private func makeContext() throws -> ModelContext {
         let schema = Schema([MenuSession.self, MenuItem.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -14,6 +19,7 @@ struct HistoryDeleteTests {
         return ModelContext(container)
     }
 
+    /// Builds a saved-menu graph with predictable item names for deletion assertions.
     private func makeSession(title: String, itemNames: [String]) -> MenuSession {
         let session = MenuSession(
             title: title,
@@ -29,6 +35,7 @@ struct HistoryDeleteTests {
     }
 
     @Test("Deleting one session cascades its items and leaves the other session intact")
+    /// Confirms deleting one visit removes only that visit and its own dishes.
     func deleteOneSessionCascadesItems() throws {
         let context = try makeContext()
 
@@ -55,6 +62,7 @@ struct HistoryDeleteTests {
     }
 
     @Test("Deleting all sessions clears both the session and item tables")
+    /// Confirms clearing history removes every saved session and every related dish.
     func deleteAllSessionsClearsBothTables() throws {
         let context = try makeContext()
 

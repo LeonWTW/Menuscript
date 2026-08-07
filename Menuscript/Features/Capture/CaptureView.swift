@@ -1,3 +1,6 @@
+// Builds the capture screen and translates user gestures into view-model calls;
+// recognition and persistence remain outside the view for clarity and testing.
+
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -21,10 +24,13 @@ struct CaptureView: View {
         GridItem(.flexible(), spacing: 8)
     ]
 
+    /// Reports whether this device can offer the camera entry point.
     private var isCameraAvailable: Bool {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
 
+    /// Composes the photo grid, add controls, recognition actions, sheets, and
+    /// alerts from observable state rather than performing business logic here.
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -107,6 +113,8 @@ struct CaptureView: View {
         }
     }
 
+    /// Bridges the optional provider error message to SwiftUI's Boolean alert
+    /// API and clears all related recovery state when the alert closes.
     private var errorAlertBinding: Binding<Bool> {
         Binding(
             get: { vm.errorMessage != nil },
@@ -116,6 +124,7 @@ struct CaptureView: View {
         )
     }
 
+    /// Builds the action appropriate to a provider's suggested recovery path.
     @ViewBuilder
     private func recoveryButton(for action: ProviderRecoveryAction) -> some View {
         switch action {
@@ -132,6 +141,8 @@ struct CaptureView: View {
         }
     }
 
+    /// Bridges capture validation issues to an alert and clears the issue when
+    /// the user dismisses it.
     private var captureIssueAlertBinding: Binding<Bool> {
         Binding(
             get: { vm.captureIssue != nil },
@@ -143,6 +154,7 @@ struct CaptureView: View {
 
     // MARK: - Photo grid
 
+    /// Shows either an empty explanation or the ordered grid of staged photos.
     @ViewBuilder
     private var photoSection: some View {
         if vm.photos.isEmpty {
@@ -162,6 +174,8 @@ struct CaptureView: View {
         }
     }
 
+    /// Renders one stable photo slot, including loading/failure state and a
+    /// remove action that addresses the slot by ID rather than array position.
     private func photoThumbnail(_ photo: CapturedPhoto) -> some View {
         ZStack {
             if let preview = photo.preview {
@@ -208,6 +222,7 @@ struct CaptureView: View {
             }
     }
 
+    /// Summarizes preparation progress, failures, or current photo capacity.
     @ViewBuilder
     private var photoLoadStatus: some View {
         if vm.pendingPhotoCount > 0 {
@@ -230,6 +245,8 @@ struct CaptureView: View {
 
     // MARK: - Add photo controls
 
+    /// Presents every supported photo source and disables all of them while a
+    /// batch is pending, recognition is running, or capacity is exhausted.
     private var addButtons: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
@@ -273,6 +290,7 @@ struct CaptureView: View {
         }
     }
 
+    /// Starts recognition only when the view model's full readiness rule passes.
     private var recognizeButton: some View {
         Button {
             vm.startRecognize()
@@ -285,6 +303,7 @@ struct CaptureView: View {
         .disabled(!vm.canRecognize)
     }
 
+    /// Blocks editing and clearly communicates that recognition is in progress.
     private var recognizingOverlay: some View {
         ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
@@ -303,6 +322,8 @@ struct CaptureView: View {
 
     // MARK: - Photo loading
 
+    /// Converts picker items into independent async loaders, then gives them to
+    /// the coordinator so slots are reserved before any load can finish.
     private func importPickedPhotos(_ items: [PhotosPickerItem]) {
         // Clear synchronously and reserve slots before any await. The UI
         // pauses new selections while these slots are pending; if stale or

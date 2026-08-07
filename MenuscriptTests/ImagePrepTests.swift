@@ -1,10 +1,15 @@
+// Verifies menu photos are resized and encoded consistently before preview, persistence, or upload.
+// Generated solid-color images keep these checks local, deterministic, and free of sample user data.
+
 import Testing
 import UIKit
 @testable import Menuscript
 
 @Suite
+/// Protects image-size limits, aspect ratio, exact JPEG reuse, and all-or-nothing failure behavior.
 struct ImagePrepTests {
     @Test("Large image is downscaled to the max long edge, aspect preserved")
+    /// Confirms large camera images shrink to the upload limit without becoming distorted.
     func downscalesLargeImage() throws {
         let image = Self.solidImage(size: CGSize(width: 4000, height: 3000))
 
@@ -21,6 +26,7 @@ struct ImagePrepTests {
     }
 
     @Test("Large picked-photo data downsamples through the pixel cap, aspect preserved")
+    /// Confirms imported image data is decoded near the required size to reduce memory use.
     func downsamplesThroughPixelCap() throws {
         let image = Self.solidImage(size: CGSize(width: 5000, height: 4000))
         let data = try #require(image.jpegData(compressionQuality: 0.9))
@@ -37,6 +43,7 @@ struct ImagePrepTests {
     }
 
     @Test("Small image is left un-upscaled")
+    /// Confirms the app does not enlarge a small image and invent unnecessary pixels.
     func doesNotUpscaleSmallImage() throws {
         let image = Self.solidImage(size: CGSize(width: 800, height: 600))
 
@@ -49,6 +56,7 @@ struct ImagePrepTests {
     }
 
     @Test("Prepared photo keeps one exact JPEG for preview, upload, and persistence")
+    /// Confirms every later stage uses the same prepared JPEG rather than producing inconsistent copies.
     func preparedPhotoUsesExactJPEG() throws {
         let image = Self.solidImage(size: CGSize(width: 2200, height: 1600))
 
@@ -61,6 +69,7 @@ struct ImagePrepTests {
     }
 
     @Test("JPEG encoder failure returns nil instead of a partial prepared photo")
+    /// Confirms an encoding error rejects the whole photo instead of exposing incomplete state.
     func preparedPhotoFailsAtomicallyWhenEncoderFails() {
         let image = Self.solidImage(size: CGSize(width: 100, height: 100))
 
@@ -70,10 +79,12 @@ struct ImagePrepTests {
     }
 
     @Test("Invalid source data cannot create a prepared photo")
+    /// Confirms random bytes fail safely before they can enter the capture flow.
     func invalidSourceDataFailsPreparation() {
         #expect(ImagePrep.preparedPhoto(from: Data([0x00, 0x01, 0x02])) == nil)
     }
 
+    /// Draws a predictable in-memory image at an exact size for resize and encoding checks.
     private static func solidImage(size: CGSize, color: UIColor = .systemRed) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1.0

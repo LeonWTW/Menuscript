@@ -1,9 +1,18 @@
+// Resolves, fetches, caches, and presents an AI explanation for one dish while
+// enforcing live-service consent and the provider mode saved with the session.
+
 import SwiftUI
 
+/// Stateless boundary for dish-explanation requests. Runtime resolution lives
+/// here so the view only manages presentation and recovery state.
 @MainActor
 enum DishExplanationService {
+    /// Resolves the requested runtime mode into services; injectable so tests
+    /// never need real credentials or network access.
     typealias RuntimeResolver = @MainActor (RuntimeMode) throws -> RuntimeServices?
 
+    /// Enforces disclosure, resolves the correct provider, and asks it to explain
+    /// the original dish name in the session's target language.
     static func fetch(
         original: String,
         detectedLanguage: String,
@@ -87,7 +96,7 @@ enum DishExplanationService {
 
     /// Action-context adapter used by `ExplainSheet`. Keeping the request
     /// inputs together prevents a completed card from reading mutable model
-    /// names or provider provenance after the user taps it.
+    /// names or the saved provider mode after the user taps it.
     static func fetchIfNeeded(
         currentExplanation: String?,
         forceRefresh: Bool,
@@ -113,9 +122,11 @@ enum DishExplanationService {
 }
 
 /// Decides whether a fetched explanation can safely become part of a
-/// session's persisted cache. Legacy sessions have no recorded provenance,
+/// session's saved cache. Older sessions have no recorded provider mode,
 /// while recorded sessions only persist results produced by the same mode.
 enum DishExplanationCachePolicy {
+    /// Allows caching when the saved provider mode is unknown or matches the current mode;
+    /// mismatched demo/live output remains transient to protect session history.
     static func shouldPersist(
         persistedMode: RuntimeMode?,
         effectiveMode: RuntimeMode
@@ -128,8 +139,8 @@ enum DishExplanationCachePolicy {
 /// Explains a single dish in the target language. Shows the cached
 /// `item.explanation` immediately when one already exists (no network call);
 /// otherwise resolves a `MenuVisionProvider` on appearance and fetches one.
-/// The toolbar's 重新生成 action always re-fetches. Results with incompatible
-/// runtime/session provenance remain transient instead of corrupting cache.
+/// The toolbar's regenerate action always re-fetches. Results with incompatible
+/// current and saved provider modes do not match remain temporary instead of changing the cache.
 struct ExplainSheet: View {
     @Bindable private var item: MenuItem
 
@@ -149,6 +160,8 @@ struct ExplainSheet: View {
     private let actionContext: MenuItemActionContext
     private let onDeleteAllSucceeded: () -> Void
 
+    /// Creates a sheet around one cache-owning model and an optional immutable
+    /// action context; production callers supply captured values for history safety.
     init(
         item: MenuItem,
         actionContext: MenuItemActionContext? = nil,
@@ -165,6 +178,8 @@ struct ExplainSheet: View {
         self.onDeleteAllSucceeded = onDeleteAllSucceeded
     }
 
+    /// Prefers a newly generated transient result, then the persisted model cache.
+    /// Empty strings are treated as absent so the loading/error UI stays meaningful.
     private var displayedExplanation: String? {
         if let transientExplanation, !transientExplanation.isEmpty {
             return transientExplanation
@@ -175,10 +190,13 @@ struct ExplainSheet: View {
         return nil
     }
 
+    /// Indicates whether any reusable explanation is already available.
     private var hasCachedExplanation: Bool {
         displayedExplanation != nil
     }
 
+    /// Composes the dish header, loading/content/error state, regeneration action,
+    /// Settings route, and one-time live-service disclosure.
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -228,6 +246,7 @@ struct ExplainSheet: View {
 
     // MARK: - Header
 
+    /// Shows the translated name for comprehension and original name for reference.
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(actionContext.translatedName)
@@ -242,6 +261,7 @@ struct ExplainSheet: View {
 
     // MARK: - Body states
 
+    /// Selects exactly one body state so loading, errors, and content never overlap.
     @ViewBuilder
     private var explanationSection: some View {
         if isLoading {
@@ -256,6 +276,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Communicates that an AI explanation request is currently in progress.
     private var loadingState: some View {
         VStack(spacing: 12) {
             ProgressView()
@@ -267,6 +288,8 @@ struct ExplainSheet: View {
         .padding(.top, 32)
     }
 
+    /// Shows a successful explanation and adds a warning when recognition
+    /// confidence for the underlying dish was low.
     private func loadedState(_ explanation: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(explanation)
@@ -280,6 +303,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Shows the error text and the action most likely to resolve its cause.
     private func errorState(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(message)
@@ -296,6 +320,7 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Maps provider recovery guidance to a Settings route or direct retry.
     @ViewBuilder
     private func recoveryButton(for action: ProviderRecoveryAction) -> some View {
         switch action {
@@ -319,12 +344,14 @@ struct ExplainSheet: View {
         }
     }
 
+    /// Displays a concise caution beside explanations of low-confidence dishes.
     private var lowConfidenceNote: some View {
         Label("辨識可能有誤，請對照原文", systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
             .foregroundStyle(Color.mtWarning)
     }
 
+    /// Forces a fresh explanation while preventing overlapping requests.
     private var regenerateButton: some View {
         Button {
             Task { await fetchExplanation(forceRefresh: true) }
@@ -337,6 +364,8 @@ struct ExplainSheet: View {
 
     // MARK: - Fetching
 
+    /// Reuses cache unless refresh is requested, then fetches and stores only
+    /// results from a compatible provider mode while turning failures into recovery UI.
     private func fetchExplanation(forceRefresh: Bool) async {
         guard forceRefresh || !hasCachedExplanation else { return }
 

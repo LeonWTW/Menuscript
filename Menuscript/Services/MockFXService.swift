@@ -1,9 +1,13 @@
+// Supplies repeatable currency conversions for offline demos, previews, and tests.
+// A single fixed USD-based table makes every cross-rate consistent without networking or saved state.
+
 import Foundation
 
 /// Deterministic, process-local FX provider for demo mode. It deliberately has
 /// no URLSession or UserDefaults dependency, so every supported conversion is
 /// available in airplane mode and no state leaks between demo runs.
 struct MockFXService: FXRateProviding {
+    /// A stable market date that keeps screenshots and tests identical across runs.
     static let fixedQuoteDate = "2026-01-15"
 
     /// Currency units per one mock USD. Cross-rates are derived from this
@@ -41,6 +45,8 @@ struct MockFXService: FXRateProviding {
         "ZAR": 18.5,
     ]
 
+    /// Derives a pair's cross-rate from the shared USD table after normalizing user-entered codes.
+    /// Unsupported currencies return nil in the same way as a live service with no usable quote.
     func rate(from rawFrom: String, to rawTo: String) async -> FXRate? {
         let from = rawFrom.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let to = rawTo.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()

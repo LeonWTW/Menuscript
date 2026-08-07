@@ -1,3 +1,7 @@
+// Converts large camera and library images into bounded JPEGs and matching previews.
+// Preparing one shared copy reduces memory and upload size while keeping the preview
+// identical to what Gemini receives.
+
 import ImageIO
 import UIKit
 
@@ -8,7 +12,9 @@ enum ImagePrep {
     /// MainActor capture state. `UIImage` itself has no Sendable annotation,
     /// but this value is never mutated after construction.
     struct PreparedPhoto: @unchecked Sendable {
+        /// The screen-ready image decoded from the exact bytes used for recognition.
         let preview: UIImage
+        /// The compressed bytes sent to recognition and saved with the session.
         let jpegData: Data
     }
 
@@ -17,6 +23,8 @@ enum ImagePrep {
     /// recognition-quality bottleneck.
     static let captureMaxPixelSize: CGFloat = 2560
 
+    /// Compresses an image as JPEG, resizing proportionally only when its longest edge exceeds the limit.
+    /// Keeping smaller images at their original dimensions avoids unnecessary resampling.
     static func jpegData(from image: UIImage, maxLongEdge: CGFloat = 1600, quality: CGFloat = 0.7) -> Data? {
         let size = image.size
         let longEdge = max(size.width, size.height)
@@ -48,7 +56,8 @@ enum ImagePrep {
         }
     }
 
-    /// Injection seam used by deterministic failure tests.
+    /// Builds a prepared photo with an injectable encoder so failure behavior can be tested deterministically.
+    /// It rejects empty or undecodable output because preview, upload, and persistence must share valid bytes.
     static func preparedPhoto(
         from image: UIImage,
         jpegEncoder: (UIImage) -> Data?

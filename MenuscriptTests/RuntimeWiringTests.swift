@@ -1,28 +1,37 @@
+// Verifies how Settings and saved provider history choose mock or live services,
+// including consent, secrets, FX metadata, caching, and recovery behavior.
+
 import Foundation
 import SwiftData
 import Testing
 import UIKit
 @testable import Menuscript
 
+/// Simulated secure-storage failure used to distinguish a broken store from a missing key.
 private enum WiringSecretFailure: Error {
     case unavailable
 }
 
+/// Lock-protected in-memory secret store that can return a key or fail on read.
+/// The lock makes observations reliable when runtime services access it concurrently.
 private final class WiringSecretStore: @unchecked Sendable, SecretStore {
     private let lock = NSLock()
     private var storedValue: String?
     private var shouldFailRead: Bool
     private var storedReadCount = 0
 
+    /// Creates the store with an optional key and an optional forced read failure.
     init(value: String? = nil, shouldFailRead: Bool = false) {
         storedValue = value
         self.shouldFailRead = shouldFailRead
     }
 
+    /// Reports how often code attempted to access a secret, proving offline paths do not.
     var readCount: Int {
         lock.withLock { storedReadCount }
     }
 
+    /// Records the access, then returns the test key or the configured storage failure.
     func read(_ key: String) throws -> String? {
         try lock.withLock {
             storedReadCount += 1
@@ -33,30 +42,38 @@ private final class WiringSecretStore: @unchecked Sendable, SecretStore {
         }
     }
 
+    /// Replaces the in-memory key while holding the lock.
     func set(_ value: String, forKey key: String) throws {
         lock.withLock { storedValue = value }
     }
 
+    /// Removes the in-memory key while holding the lock.
     func delete(_ key: String) throws {
         lock.withLock { storedValue = nil }
     }
 }
 
+/// Thread-safe counter for proving that lazy live-service factories were not called.
 private final class WiringInvocationCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var storedCount = 0
 
+    /// Returns the current count under the lock.
     var count: Int { lock.withLock { storedCount } }
 
+    /// Records one invocation without introducing a race into the test.
     func increment() {
         lock.withLock { storedCount += 1 }
     }
 }
 
+/// Actor-backed vision spy that returns fixed offline content and safely counts
+/// extraction and explanation calls from asynchronous production code.
 private actor WiringVisionProvider: MenuVisionProvider {
     private var extractCallCount = 0
     private var explainCallCount = 0
 
+    /// Records one recognition request and returns a small known menu.
     func extractMenu(
         images: [Data],
         targetLanguage: String,
@@ -80,6 +97,7 @@ private actor WiringVisionProvider: MenuVisionProvider {
         )
     }
 
+    /// Records one explanation request and returns known text.
     func explainDish(
         original: String,
         language: String,
@@ -89,14 +107,18 @@ private actor WiringVisionProvider: MenuVisionProvider {
         return "Explanation"
     }
 
+    /// Exposes the number of menu-recognition calls.
     func extractCalls() -> Int { extractCallCount }
+    /// Exposes the number of dish-explanation calls.
     func explainCalls() -> Int { explainCallCount }
 }
 
+/// Actor-backed FX spy that returns a configurable quote and counts requests safely.
 private actor WiringFXProvider: FXRateProviding {
     private var callCount = 0
     private let result: FXRate?
 
+    /// Creates the provider with a realistic fixed live quote unless a test supplies another result.
     init(result: FXRate? = FXRate(
         rate: 0.0065,
         quoteDate: "2026-07-15",
@@ -106,15 +128,19 @@ private actor WiringFXProvider: FXRateProviding {
         self.result = result
     }
 
+    /// Records one currency request and returns the configured quote.
     func rate(from: String, to: String) async -> FXRate? {
         callCount += 1
         return result
     }
 
+    /// Exposes the number of FX requests to tests.
     func calls() -> Int { callCount }
 }
 
+/// Vision provider that always reports an invalid API key so recovery mapping is deterministic.
 private struct InvalidKeyVisionProvider: MenuVisionProvider {
+    /// Simulates invalid credentials during menu recognition.
     func extractMenu(
         images: [Data],
         targetLanguage: String,
@@ -123,6 +149,7 @@ private struct InvalidKeyVisionProvider: MenuVisionProvider {
         throw VisionProviderError.invalidAPIKey
     }
 
+    /// Simulates the same invalid credentials during dish explanation.
     func explainDish(
         original: String,
         language: String,
@@ -132,9 +159,12 @@ private struct InvalidKeyVisionProvider: MenuVisionProvider {
     }
 }
 
+/// Serial main-actor suite for runtime choices that temporarily change shared
+/// preferences or timezone state and therefore must not overlap.
 @MainActor
 @Suite("Runtime wiring", .serialized)
 struct RuntimeWiringTests {
+    /// Creates a model context backed only by memory, keeping tests away from user data.
     private func makeContext() throws -> ModelContext {
         let configuration = ModelConfiguration(
             schema: AppSchema.current,
@@ -147,6 +177,7 @@ struct RuntimeWiringTests {
         return ModelContext(container)
     }
 
+    /// Creates an isolated Settings domain with the runtime choices needed by one test.
     private func makeDefaults(
         useMock: Bool,
         targetLanguage: String = "English",
@@ -161,6 +192,7 @@ struct RuntimeWiringTests {
         return (defaults, suiteName)
     }
 
+    /// Creates a tiny valid photo so capture wiring can be tested without fixtures.
     private func makeDemoImage() -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { context in
             UIColor.systemOrange.setFill()
@@ -168,6 +200,7 @@ struct RuntimeWiringTests {
         }
     }
 
+    /// Cooperatively waits for asynchronous state without assuming device speed.
     private func waitUntil(
         maxIterations: Int = 10_000,
         _ condition: () async -> Bool
@@ -179,6 +212,8 @@ struct RuntimeWiringTests {
         return false
     }
 
+    /// Protects the promise that demo capture is fully offline and records mock
+    /// the mock provider mode plus stable quote details in the saved session.
     @Test("Production mock capture is offline and persists mock provenance")
     func productionMockCaptureIsFullyOffline() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: true)
@@ -209,6 +244,8 @@ struct RuntimeWiringTests {
         #expect(session.fxFetchedAt == FXQuoteDate.date(from: MockFXService.fixedQuoteDate))
     }
 
+    /// Protects privacy: live capture calls no provider before consent, remembers
+    /// acceptance afterward, and does not ask again for later captures.
     @Test("Live capture sends nothing until disclosure is accepted, then remembers consent")
     func liveDisclosureGatesProviderCallsOnce() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: false)
@@ -254,6 +291,8 @@ struct RuntimeWiringTests {
         #expect(await fx.calls() == 2)
     }
 
+    /// Protects distinct recovery guidance for an invalid key versus an unavailable
+    /// secure store, so users are not incorrectly told to replace credentials.
     @Test("Capture maps invalid keys and secure-store failures to distinct recovery")
     func captureRecoveryActionsRemainTyped() async throws {
         let (injectedDefaults, injectedSuite) = try makeDefaults(
@@ -294,6 +333,8 @@ struct RuntimeWiringTests {
         #expect(unavailableViewModel.errorMessage == "安全儲存空間暫時無法使用，請稍後再試。")
     }
 
+    /// Protects the promise that mock dish explanations do not read secrets or
+    /// create live FX services, including legacy sessions with no saved mode.
     @Test("Mock dish explanation never resolves a secret or live FX dependency")
     func mockExplanationIsFullyOffline() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: false)
@@ -338,6 +379,8 @@ struct RuntimeWiringTests {
         #expect(liveFactoryCalls.count == 0)
     }
 
+    /// Confirms the explicit demo preference safely overrides saved live history
+    /// for explanation and bill FX without constructing live dependencies.
     @Test("Demo mode overrides persisted live provenance for explanation and bill FX")
     func demoToggleOverridesPersistedLiveDependencies() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: true)
@@ -387,6 +430,8 @@ struct RuntimeWiringTests {
         #expect(liveFactoryCalls.count == 0)
     }
 
+    /// Protects saved sessions from explanations generated under a different
+    /// provider mode while allowing compatible and older results to be cached.
     @Test("Explanation cache persists only when runtime and session provenance are compatible")
     func explanationCachePolicyProtectsPersistedProvenance() {
         let cases: [(
@@ -410,6 +455,8 @@ struct RuntimeWiringTests {
         }
     }
 
+    /// Protects live explanation consent for explicit and legacy modes and proves
+    /// exactly one provider call occurs only after acceptance.
     @Test("Explicit and legacy live explanations require consent before one provider call")
     func liveExplanationDisclosureGatesProviderCalls() async throws {
         #expect(GeminiDisclosureGate.acceptedKey == CaptureViewModel.liveDisclosureAcceptedKey)
@@ -455,8 +502,8 @@ struct RuntimeWiringTests {
                 #expect(error == .consentRequired)
             }
 
-            // Cancelling means taking no acceptance action: the service gate
-            // has not resolved dependencies or crossed the provider boundary.
+            // Cancelling means taking no acceptance action: no services have
+            // been created and no provider has received a request.
             #expect(defaults.bool(forKey: GeminiDisclosureGate.acceptedKey) == false)
             #expect(resolverCalls.count == 0)
             #expect(await vision.explainCalls() == 0)
@@ -495,6 +542,8 @@ struct RuntimeWiringTests {
         }
     }
 
+    /// Protects the cache fast path: existing text returns before consent checks,
+    /// secret access, provider resolution, or network-capable services.
     @Test("Cached explanation bypasses disclosure and every runtime dependency")
     func cachedExplanationIsNoCall() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: false)
@@ -535,6 +584,8 @@ struct RuntimeWiringTests {
         #expect(liveFactoryCalls.count == 0)
     }
 
+    /// Protects offline bill FX selection and standard quote-date storage for
+    /// both mock sessions and legacy sessions without provider history.
     @Test("Menu and bill keep mock FX offline and persist canonical quote metadata")
     func menuBillMockSelectionIsOffline() async throws {
         let (defaults, suiteName) = try makeDefaults(useMock: false)
@@ -574,9 +625,9 @@ struct RuntimeWiringTests {
         #expect(session.fxQuoteDate == MockFXService.fixedQuoteDate)
         #expect(session.providerMode == .mock)
 
-        // Legacy provenance stays nil. Current mock preference selects the
-        // offline provider without constructing the live dependency, and an
-        // FX refresh must not backfill recognition provenance.
+        // Older sessions keep their unknown provider mode. The current demo
+        // preference selects offline FX without creating a live service, and
+        // refreshing FX must not invent recognition history.
         defaults.set(true, forKey: SettingsKeys.useMockProvider)
         let legacy = MenuSession(
             detectedLanguage: "Japanese",
@@ -605,6 +656,8 @@ struct RuntimeWiringTests {
         #expect(legacy.providerModeRaw == nil)
     }
 
+    /// Protects completed bills from rate changes and keeps quote dates stable
+    /// across timezones, legacy dates, and same-currency sessions.
     @Test("Completed bills never call FX and quote dates do not shift with timezone")
     func completedBillAndQuoteDatesAreStable() async throws {
         let provider = WiringFXProvider()

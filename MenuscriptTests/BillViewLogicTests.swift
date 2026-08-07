@@ -1,3 +1,6 @@
+// Verifies the exact calculations and messages BillView derives from a saved menu session.
+// Pure models are used instead of UI automation so money rules remain fast and deterministic.
+
 import Foundation
 import Testing
 @testable import Menuscript
@@ -10,6 +13,7 @@ import Testing
 struct BillViewLogicTests {
 
     @Test("FX refresh failure copy distinguishes Demo Mode coverage from live-network failure")
+    /// Confirms Demo Mode and live-network failures give users the appropriate next step.
     func fxRefreshFailureCopyMatchesProviderMode() {
         #expect(
             BillFXPresentation.unavailableMessageKey(for: .mock)
@@ -25,6 +29,7 @@ struct BillViewLogicTests {
         )
     }
 
+    /// Builds a minimal dish with the price and quantity needed for bill calculations.
     private func makeItem(priceValue: Decimal?, quantity: Int, sortOrder: Int) -> MenuItem {
         MenuItem(
             originalName: "dish",
@@ -49,6 +54,7 @@ struct BillViewLogicTests {
     }
 
     @Test("Order lines subtotal sums priced, quantity>0 items and ignores unpriced/zero-qty lines")
+    /// Confirms the view subtotal includes only selected dishes with known numeric prices.
     func orderLinesSubtotal() {
         let items = [
             makeItem(priceValue: Decimal(1280), quantity: 2, sortOrder: 0), // 2560
@@ -61,6 +67,7 @@ struct BillViewLogicTests {
     }
 
     @Test("Total applies a 10% surcharge on top of the order-lines subtotal")
+    /// Confirms the displayed total adds the selected service charge after calculating the subtotal.
     func totalWithTenPercentSurcharge() {
         let items = [
             makeItem(priceValue: Decimal(1000), quantity: 2, sortOrder: 0), // subtotal 2000
@@ -71,6 +78,7 @@ struct BillViewLogicTests {
     }
 
     @Test("Per-person JPY split of an evenly-divisible total needs no rounding")
+    /// Confirms an exact whole-yen split is left unchanged.
     func perPersonJPYEvenSplit() {
         // 1800 subtotal + 10% surcharge = 1980, split 3 ways = 660 exactly.
         let total = BillMath.total(subtotal: Decimal(1800), surchargePercent: 10)
@@ -80,6 +88,7 @@ struct BillViewLogicTests {
     }
 
     @Test("Per-person JPY split of an uneven total rounds up so shares never fall short")
+    /// Confirms an uneven whole-yen split rounds upward enough to cover the bill.
     func perPersonJPYUnevenSplitRoundsUp() {
         let result = BillMath.perPerson(total: Decimal(1000), people: 3, fractionDigits: 0)
         #expect(result == Decimal(334))
@@ -87,6 +96,7 @@ struct BillViewLogicTests {
     }
 
     @Test("Converted per-person splits the FX-converted total at the home currency's fraction digits, rounding up")
+    /// Confirms conversion happens before splitting and uses the home currency's decimal precision.
     func convertedPerPersonTwoFractionDigits() {
         // 1000 JPY converted at 0.0521 -> 52.1 HKD, split 3 ways at 2 digits.
         let convertedTotal = BillMath.converted(Decimal(1000), rate: 0.0521)
@@ -97,6 +107,7 @@ struct BillViewLogicTests {
     }
 
     @Test("effectiveFXRate suppresses same-currency sessions even when a legacy 1.0 rate is stored")
+    /// Confirms same-currency bills hide obsolete conversion data because no conversion is needed.
     func effectiveFXRateNilForSameCurrencyEvenWithStoredRate() {
         let session = MenuSession(
             detectedLanguage: "日文",
@@ -109,6 +120,7 @@ struct BillViewLogicTests {
     }
 
     @Test("effectiveFXRate passes the stored rate through for different currencies")
+    /// Confirms different-currency bills expose their saved rate for conversion.
     func effectiveFXRatePassesThroughForDifferentCurrencies() {
         let session = MenuSession(
             detectedLanguage: "日文",

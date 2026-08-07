@@ -1,7 +1,11 @@
+// Verifies privacy, failure, and disclosure wording remains present and exact in both supported languages.
+// These checks make copy changes deliberate because inaccurate text could mislead users about data handling.
+
 import Foundation
 import Testing
 
 @Suite("Privacy and localization contract")
+/// Protects critical translations, source-to-catalog coverage, and camera/photo disclosure wording.
 struct PrivacyLocalizationContractTests {
     private static let wave3ExactTranslations = [
         "未能儲存菜單，請再試一次。": [
@@ -80,12 +84,14 @@ struct PrivacyLocalizationContractTests {
         "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。",
     ]
 
+    /// Locates the repository relative to this test file so catalog checks work from any launch directory.
     private static var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
     }
 
+    /// Loads one production string catalog as a dictionary for exact contract assertions.
     private func catalog(named name: String) throws -> [String: Any] {
         let url = Self.repoRoot
             .appendingPathComponent("Menuscript/Resources")
@@ -95,6 +101,7 @@ struct PrivacyLocalizationContractTests {
         return try #require(object as? [String: Any])
     }
 
+    /// Returns a translated leaf only when Xcode marks it complete, treating draft values as missing.
     private func localizedValue(
         for key: String,
         language: String,
@@ -109,6 +116,7 @@ struct PrivacyLocalizationContractTests {
     }
 
     @Test("Wave 2 user-facing keys have explicit English and Traditional Chinese")
+    /// Confirms every safety-critical message has a non-empty value in both supported languages.
     func criticalKeysAreLocalized() throws {
         let root = try catalog(named: "Localizable.xcstrings")
         let strings = try #require(root["strings"] as? [String: Any])
@@ -122,6 +130,7 @@ struct PrivacyLocalizationContractTests {
     }
 
     @Test("Every literal L10n key used by Swift source exists in the catalog")
+    /// Confirms source code cannot request a literal localization key that the catalog does not contain.
     func literalL10nKeysExist() throws {
         let root = try catalog(named: "Localizable.xcstrings")
         let strings = try #require(root["strings"] as? [String: Any])
@@ -152,6 +161,7 @@ struct PrivacyLocalizationContractTests {
     }
 
     @Test("Wave 3 safe-failure strings have exact bilingual translations")
+    /// Confirms approved failure messages cannot drift from their reviewed bilingual wording.
     func wave3SafeFailureStringsAreExact() throws {
         let root = try catalog(named: "Localizable.xcstrings")
         let strings = try #require(root["strings"] as? [String: Any])
@@ -167,6 +177,7 @@ struct PrivacyLocalizationContractTests {
     }
 
     @Test("Camera and photo-library disclosures are exact in both languages")
+    /// Confirms iOS permission prompts state exactly when menu photos leave the device in Live Mode.
     func photoPurposeStringsAreExact() throws {
         let root = try catalog(named: "InfoPlist.xcstrings")
         let strings = try #require(root["strings"] as? [String: Any])
