@@ -1,0 +1,62 @@
+Repository Reviewed
+Repository Assignment: Repository B
+Student or project name: Menuscript
+GitHub repository URL: (Not provided; iOS Swift App via XcodeGen)
+Branch reviewed: sprint-4-quality
+Latest commit hash reviewed: 41df014 / d5794d6
+Approximate date and time reviewed: 2026-08-02
+Initial Understanding
+What the project does: Menuscript is a client-only iOS application that translates foreign restaurant menus, explains dishes, and calculates split bills using device orchestration and third-party APIs (Google Gemini, Frankfurter).
+Who or what it is intended to support: It supports international travelers who need to understand unfamiliar menus and split bills in their home currency.
+Primary workflow or capability: Users capture a menu photo, which is extracted and translated via an LLM, allowing them to browse items, read allergen warnings, build a cart, and calculate a versioned, immutable bill snapshot.
+Repository Organization
+What is organized well: The repository exhibits a highly professional structure, breaking the codebase into logical domains: App, Features, Models, Resources, and Services.
+Were important files easy to locate: Yes, domain boundaries are strict, making it easy to locate specific logic (e.g., BillMath.swift in Models, CaptureViewModel.swift in Features).
+Were inappropriate artifacts excluded: Yes, .gitignore is present, and the use of project.yml indicates Xcode projects are generated dynamically rather than cluttering version control.
+Organizational improvement: The MenuscriptTests directory contains a massive, flat list of over 30 test files. Mirroring the main app's folder structure (e.g., MenuscriptTests/Features, MenuscriptTests/Services) would make navigating the test suite much easier.
+README and Run Instructions
+Does it explain the project's purpose: Yes, the accompanying project-vision.md and requirements.md extensively define the goal of assisting travelers with menu translation and bill splitting.
+Does it identify prerequisites and dependencies: Yes, documentation dictates the use of xcodegen generate and Xcode build commands.
+Does it provide clear setup and run instructions: Run instructions are embedded in the manual verification logs, requiring specific xcodebuild and simctl terminal commands.
+Does it explain expected behavior: Yes, requirements.md heavily details expected functional, data, and privacy behaviors.
+Does it describe current limitations: Yes, it explicitly scopes out itemized bill splitting, custom backend servers, and offline LLM recognition.
+Identify one README strength and one recommended improvement:
+Strength: The project establishes an incredibly detailed written contract for its features in requirements.md, leaving no ambiguity about expected behavior.
+Improvement: The core xcodegen generate and testing build commands are scattered inside bug-scan-fixes and verification docs. Centralizing these build steps into the root README.md would immediately help a new engineer bootstrap the project.
+Architecture and Implementation Alignment
+Does the architecture document accurately describe the major components: Yes, it accurately outlines the SwiftUI client views, the SwiftData local persistence, and the RuntimeServiceResolver acting as the on-device server equivalent.
+Does it explain how data moves: Yes, it describes the flow from photo capture to provider resolution, draft session creation, and finally freezing into an immutable BillSnapshot.
+Does it reflect current responsibilities: Yes, it heavily details the Sprint 3 shift toward making completed bills immutable and isolating persistence writes inside SessionStore.
+Mismatch/Observation: The architecture perfectly aligns with the implementation. For instance, the architecture document notes that destructive operations run in a short-lived context to avoid UI state issues, which is directly confirmed by the tests and code in SessionStore.swift.
+Testing and Verification Evidence
+What important behavior is tested: An exhaustive suite of 220 tests verifies JSON parsing, SwiftData migrations, bill math calculations, FX caching logic, and dependency injection wiring.
+Do the tests include meaningful assertions: Yes, tests assert exact numerical outputs, timezone isolation for FX quote dates, and exact localization string matching.
+Are normal/boundary/failure cases represented: Absolutely. The suite specifically targets edge cases, such as handling negative LLM price outputs, testing API timeouts, and attempting to re-finalize already completed sessions.
+Does manual verification cover complete user workflows: Yes, manual-verification.md tracks rigorous scenarios including airplane mode toggles, cache expiry, and physical device permission prompts.
+Does the evidence increase confidence: Yes, the combination of 220 automated tests and adversarial manual testing provides massive confidence.
+Identify one quality strength and one behavior needing stronger testing:
+Strength: The developer treats testing as an adversarial exercise, explicitly noting when a test falsely passed due to leaked host machine state (UserDefaults) and fixing the dependency injection to make the test hermetic.
+Improvement: The layout behavior at the largest accessibility text sizes (Dynamic Type AX3+) was flagged as a risk but left unverified; adding snapshot tests or formal UI testing for these sizes would ensure accessibility compliance.
+AI-Assisted Engineering Evidence
+Does it explain how AI contributed: Yes, ai-implementation-review.md explicitly details using Claude Code as a primary code generator and as an adversarial engineering reviewer.
+Does it identify accepted/rejected suggestions: Yes, the developer accepted an isolated-deletion-context for SwiftData but rejected brittle testing suggestions (like using Mirror reflection) and postponed fixing non-critical Dynamic Type overflows.
+Does it explain manual review: Yes, the developer re-ran automated suites and performed independent manual UI passes on the simulator to verify the AI's bug fixes.
+Does it demonstrate retained responsibility: Yes, the developer explicitly states they defined the milestones, wrote acceptance criteria, and made all final product judgment calls regarding immutable data.
+Identify one strength or question:
+Strength: The developer utilized multiple AI agents to perform a multi-lens bug scan (money logic, concurrency, security). This adversarial use of AI to audit the codebase, rather than just generate it, is a highly advanced engineering practice.
+Repository History and Project Evolution
+Do commits communicate progress: Yes, commits are described as single-purpose and heavily scoped to specific milestones (e.g., 8a19089 for RuntimeServiceResolver).
+Can you identify evolution across sprints: The documentation outlines a brilliant evolution: Sprint 2 built features (allergens), Sprint 3 focused purely on persistence and privacy hardening, and Sprint 4 focused on quality seams and demo mode guarantees.
+Are branches understandable: Yes, branch names like sprint-3-expansion and sprint-4-quality clearly indicate their purpose.
+Observation: The project demonstrates exceptional maturity by dedicating entire sprints to resolving technical debt and hardening offline architectural boundaries rather than blindly rushing to add new UI features.
+Engineering Strengths
+Strength 1: Immutable State Modeling. The implementation of BillSnapshot in Sprint 3 is an outstanding architectural decision. By freezing the exact FX rates, currencies, and line items into opaque, versioned bytes at the time of checkout, the app ensures that historical bills cannot be retroactively corrupted by future settings changes or rate refreshes. This drastically improves data reliability.
+Strength 2: Rigorous Privacy and Provider Boundaries. The RuntimeServiceResolver creates an airtight boundary between the MockVisionProvider and the live GeminiProvider. Combined with the GeminiDisclosureGate and Keychain-backed SecretStore, this ensures the app is highly secure and never accidentally leaks user data or API keys during demo modes.
+Recommendations or Engineering Questions
+Recommendation 1: Implement a Data Retention/Pruning Strategy. The architecture.md file notes that full-resolution (downsampled to 2560px) images are stored indefinitely in SwiftData, which will cause unbounded storage growth for heavy users. This matters because it will eventually degrade device performance and frustrate users. I recommend implementing a retention policy that prunes raw photo data older than a certain threshold (e.g., 30 days) while keeping the lightweight BillSnapshot intact for history.
+Recommendation 2: Migrate Automation Scripts to Native XCUITest. The manual verification process currently relies on external host tools like osascript and cliclick to drive UI taps, which resulted in fragile tests due to macOS Accessibility permissions. This matters because it makes continuous integration impossible. I recommend porting these flows into a formal Xcode UI testing target.
+Highest-Priority Recommendation
+Highest Priority: Implement the photo data retention/pruning strategy.
+Why: While XCUITests improve developer experience, unbounded storage growth is a critical user-facing defect. Implementing a pruning mechanism will prevent the app from consuming gigabytes of user storage over time, providing the greatest immediate benefit to the application's professional readiness and longevity.
+Final Reviewer Summary
+Menuscript is an exceptionally engineered, production-grade iOS application. It excels in immutable data modeling, strict dependency injection, and utilizing AI as an adversarial code auditor. The most critical risk is the lack of a data retention policy for high-resolution images stored in SwiftData. Because of the flawless architectural boundaries, deep modularity, and a suite of 220 automated tests, another engineer could join this project and safely refactor or expand it with absolute confidence.
