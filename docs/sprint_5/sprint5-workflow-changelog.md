@@ -2,6 +2,15 @@
 
 Peer Review Activity 2 嘅 multi-agent workflow 改動總結。改動以 `a41caf6` 為 base，已提交到 branch `sprint-5-professional-completion`；實作主 commit 係 `9c3057e`。
 
+> **前向更正（2026-08-18）— 本檔屬 `9c3057e` 時點嘅歷史記錄**
+>
+> Sprint 5 收尾 commit `61e915d` 有兩處令本檔內容過時：
+>
+> 1. **Prune 資格已收緊。** 第 2 節「Prune 嘅安全界線（設計核心）」寫嘅 `billSnapshotData != nil` **已被取代**，只反映 `9c3057e` 當時嘅設計。最終規則要求 snapshot **成功 decode**——`session.billSnapshot != nil`（`Menuscript/Services/PhotoRetentionService.swift:68`）——所以 corrupt 同 unsupported-version 嘅 snapshot 而家一併受保護，唔會再被當成「有 snapshot」而清相。
+> 2. **數字已被之後嘅改動取代。** 最終 localization 係 **218 keys**（本檔第 4 節嘅 214 係當時 checkpoint）；最終測試係 **201 Swift Testing + 41 XCTest = 242 條、0 failures**（本檔第 5 節嘅 236 同樣係當時 checkpoint）。
+>
+> 最終狀態同證據見 `docs/ai-implementation-review.md` 嘅 2026-08-18 addendum 同 `docs/architecture.md`。
+
 ---
 
 ## 1. Workflow 執行摘要
