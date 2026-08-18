@@ -416,3 +416,44 @@ Row 3's `ZPHOTOSPRUNEDAT` is now stamped and `length(ZPHOTOS)` fell from 1113 to
 ### Status
 
 Retention is **verified end to end on the simulator for the default 30-day policy**: an aged completed session is pruned, its immutable bill is byte-identical afterwards, aged drafts and same-day sessions are untouched, the prune is idempotent and durable across relaunch, and the UI distinguishes a pruned session from one that never had photos. Two gaps are named rather than glossed: the notice alert's text was not driven on screen, and no on-disk byte reclamation was measured because the demo photos are stored inline.
+
+## 2026-08-18 — Sprint 5 Final Safety and Completion Addendum
+
+This addendum records the frozen Sprint 5 state after an adversarial review found that the first retention implementation treated any non-`nil` snapshot bytes as sufficient evidence that the settled bill was recoverable. It also records the three small completion hardening items accepted before code freeze. Earlier dated sections remain historical evidence; the points below say exactly which evidence still applies and which behavior is new.
+
+### Final automated verification — PASS
+
+| Check | Evidence and observed result |
+|---|---|
+| Full frozen suite | **PASS — 2026-08-18.** 201 Swift Testing tests across 35 suites plus 41 XCTest tests = **242 total**, 0 failures. Exact `xcodebuild` result: `** TEST SUCCEEDED **`. The earlier 195 + 41 = 236 figure was the pre-safety checkpoint, not the final count. |
+| Retention production fixtures | Every positive prune fixture now creates a deterministic selected-item session, captures it with `BillSnapshot.capture(from:completedAt:)`, and encodes it with `BillSnapshotCodec.encode`, matching production finalization. The old `Data("{\"v\":1}".utf8)` value remains only as deliberately corrupt negative input. |
+| Retention invalid-state protection | Four new regression tests cover an expired corrupt snapshot, an expired unsupported-version snapshot, a mixed valid/corrupt batch, and an all-invalid batch. They assert that invalid records keep their photos and prune stamp unchanged; the mixed batch still prunes the valid record in one save, while the all-invalid batch saves nothing. |
+| Completed-session FX write guard | A regression calls `SessionStore.updateFXRate` on a completed session and asserts exact `SessionStoreError.completedSessionCannotUpdateFXRate`, all five FX fields unchanged, zero save calls, and no pending context changes. The store throws before reading/mutating those fields. `BillView` retains its independent post-`await` completion recheck and suppresses only that expected typed race; generic persistence errors still alert. |
+| Small-rate presentation | Parameterized coverage pins ordinary values, a small value, the exact `0.00000001` threshold, a positive value below it, and a value just above it. Output is POSIX fixed-decimal with at most eight fractional digits and trimmed trailing zeros; a positive value below the threshold is `<0.00000001`. |
+
+### Why the 2026-08-16 retention pass remains applicable
+
+The session in § *Sprint 5: Photo Retention Pruning Verification* was finalized through the production UI and held a real, readable v1 snapshot. The final safety change does not alter that eligible path: it strengthens the filter by requiring the stored snapshot to decode through the same production codec before `photos` is loaded and cleared. Its observations therefore remain valid for a readable completed bill — photo removal, `photosPrunedAt`, byte-identical bill data, draft protection, and relaunch durability.
+
+That earlier pass does **not** prove the new invalid-snapshot behavior. Missing/corrupt/unsupported, mixed valid/corrupt, and all-invalid/no-save cases are automated unit evidence only. At the 2026-08-16 checkpoint the service suite had eleven tests; the four safety regressions above bring the final retention-service coverage to fifteen. This scope boundary is explicit so the earlier manual result is not silently stretched over behavior it never exercised.
+
+### Draft-finalization confirmation — manual PASS
+
+- **Date/environment:** 2026-08-18, iPhone 16e simulator, iOS 26.3, English UI, offline Demo Mode. No live Gemini or FX request was part of this pass.
+- **Dialog:** On an editable draft Bill, tapping **Done** displayed the English finalization confirmation dialog.
+- **Cancel/outside path:** Dismissing through the outside/cancel path left the draft on the editable Bill screen. The people count could still be changed from **2 → 3**, directly confirming that cancellation had not finalized the session.
+- **Confirm path:** Opening the dialog again and choosing **Finish Bill** used the existing finalization path, returned to History, and showed the session under **Completed**.
+- **Completed-session behavior:** The implementation retains the pre-existing direct-dismiss behavior for Done on an already completed bill; this pass specifically observed the two draft branches above.
+
+### Still pending / not inferred
+
+| Item | Final status |
+|---|---|
+| Physical-device smoke, including real camera and on-device performance | **Pending.** Menuscript has still not been run on physical hardware. |
+| Airplane-mode device validation for the Sprint 4 offline guarantee | **Pending.** Simulator/unit evidence does not substitute for a radio-isolated device run. |
+| Formal live-Gemini-key path, including first-use disclosure/cancel/accept cases | **Pending.** The informal 2026-07-22 simulator spot-check remains useful historical evidence, but it does not close the formal cases 1–2 or a current physical-device live-key smoke. |
+| Pruned-photo notice alert body on screen | **Pending.** The icon swap was observed on 2026-08-16; the alert title/body still has source and localization coverage only because the toolbar tap did not land. |
+| Actual external-storage disk reclamation | **Pending.** The demo payload's encoded column shrank, but no external file-size reduction was measured. |
+| 90-day / keep-forever end-to-end behavior and injected retention failure alerts | **Pending at manual level.** These remain unit-covered only, as recorded in the 2026-08-16 section. |
+
+The final 242-test pass, the narrow C2 simulator pass, and the earlier valid-snapshot retention evidence complete the frozen automated/simulator evidence claimed for Sprint 5. None of the pending device, live-key, alert-body, or storage-reclamation work is represented as passed.
