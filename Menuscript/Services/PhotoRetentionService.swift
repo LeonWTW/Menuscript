@@ -38,8 +38,9 @@ struct PhotoRetentionService {
     ///
     /// Age is measured from `createdAt` and the boundary is inclusive, so a
     /// session exactly one window old is pruned. Drafts, sessions saved by older
-    /// app versions, and completed sessions without a stored bill are all
-    /// protected: for those the photos are the only surviving record of the meal.
+    /// app versions, and completed sessions whose stored bill is missing,
+    /// corrupt, or unsupported are all protected: for those the photos are the
+    /// only surviving record of the meal.
     @discardableResult
     func pruneExpiredPhotos(policy: PhotoRetentionPolicy, now: Date = .now) throws -> Int {
         guard let window = policy.retentionWindow else { return 0 }
@@ -57,13 +58,14 @@ struct PhotoRetentionService {
             throw PhotoRetentionError.fetchFailed(error.localizedDescription)
         }
 
-        // Small stored fields are tested before `photos`, so the large
-        // external-storage data is only loaded for sessions that may be pruned.
+        // Small stored fields are tested before decoding the bill and loading
+        // `photos`, so the external-storage data is only loaded for sessions
+        // whose finalized bill is readable by this app version.
         let expired = sessions.filter { session in
             session.lifecycleStatus == .completed
-                && session.billSnapshotData != nil
-                && now.timeIntervalSince(session.createdAt) >= window
                 && session.photosPrunedAt == nil
+                && now.timeIntervalSince(session.createdAt) >= window
+                && session.billSnapshot != nil
                 && !session.photos.isEmpty
         }
         guard !expired.isEmpty else { return 0 }

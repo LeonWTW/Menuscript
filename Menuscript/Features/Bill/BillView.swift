@@ -7,6 +7,25 @@ import SwiftUI
 /// Formats FX metadata and failure wording for display without mixing it into
 /// fetching or the SwiftUI layout.
 enum BillFXPresentation {
+    /// Formats a stored exchange rate without rounding a legitimate small
+    /// positive value down to a misleading zero.
+    static func rateText(_ rate: Double) -> String {
+        let displayFloor = 0.00000001
+        if rate > 0, rate < displayFloor {
+            return "<0.00000001"
+        }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 8
+        formatter.roundingMode = .halfUp
+
+        return formatter.string(from: NSNumber(value: rate)) ?? "\(rate)"
+    }
+
     /// Returns the localized source key for an unavailable FX refresh. Demo
     /// fixtures have finite coverage, while live mode failures may be network
     /// related, so the two cases must not surface the same explanation.
@@ -70,6 +89,7 @@ struct BillView: View {
 
     @State private var isRefreshingRate = false
     @State private var isFinalizing = false
+    @State private var showFinalizeConfirmation = false
     @State private var finalizeErrorMessage: String?
     @State private var fxRefreshErrorMessage: String?
 
@@ -113,10 +133,24 @@ struct BillView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") {
-                    completeOrDismiss()
+                    if session.isCompleted {
+                        completeOrDismiss()
+                    } else {
+                        showFinalizeConfirmation = true
+                    }
                 }
                 .disabled(isFinalizing)
             }
+        }
+        .confirmationDialog(
+            "確定要完成帳單？",
+            isPresented: $showFinalizeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("完成帳單") { completeOrDismiss() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("完成後將無法再修改帳單內容。")
         }
         .alert("帳單", isPresented: finalizeErrorBinding) {
             Button("好", role: .cancel) {}
@@ -359,7 +393,7 @@ struct BillView: View {
                 display.homeCurrency
             )
         }
-        let rateText = String(format: "%.4f", fxRate)
+        let rateText = BillFXPresentation.rateText(fxRate)
         let dateText = BillFXPresentation.quoteDate(
             quoteDate: display.fxQuoteDate,
             legacyDate: display.fxRateDate
@@ -402,7 +436,7 @@ struct BillView: View {
     }
 
     /// Fetches and persists a new rate for an editable cross-currency bill,
-    /// translating provider and save failures into clear alert messages.
+    /// rechecking editability after the async fetch before saving it.
     private func refreshFXRate() async {
         guard !session.isCompleted,
               session.menuCurrency.uppercased() != session.homeCurrency.uppercased() else { return }
@@ -418,8 +452,11 @@ struct BillView: View {
             )
             return
         }
+        guard !session.isCompleted else { return }
         do {
             try SessionStore(context: modelContext).updateFXRate(fresh, for: session)
+        } catch SessionStoreError.completedSessionCannotUpdateFXRate {
+            return
         } catch {
             fxRefreshErrorMessage = L10n.string(
                 "最新匯率未能儲存，請稍後再試。"

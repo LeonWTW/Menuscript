@@ -110,6 +110,56 @@ struct SessionStoreTests {
         #expect(persisted.providerModeRaw == RuntimeMode.mock.rawValue)
     }
 
+    /// Prevents a late provider response from changing or saving any exchange-rate
+    /// metadata after the bill has already become an immutable completed session.
+    @Test("Updating an FX rate rejects completed sessions without saving")
+    func updateFXRateRejectsCompletedSessions() throws {
+        let context = try makeContext(sessionCount: 1)
+        let session = try #require(
+            context.fetch(FetchDescriptor<MenuSession>()).first
+        )
+        let originalRateDate = Date(timeIntervalSince1970: 1_725_062_400)
+        let originalFetchedAt = Date(timeIntervalSince1970: 1_725_066_000)
+        session.fxRate = 0.05
+        session.fxRateDate = originalRateDate
+        session.fxSource = "live"
+        session.fxQuoteDate = "2024-08-31"
+        session.fxFetchedAt = originalFetchedAt
+        session.lifecycleStatusRaw = "completed"
+        try context.save()
+        #expect(!context.hasChanges)
+
+        let freshRate = FXRate(
+            rate: 0.0067,
+            quoteDate: "2025-07-15",
+            fetchedAt: Date(timeIntervalSince1970: 1_752_556_800),
+            source: .cached
+        )
+        var saveCount = 0
+        let store = SessionStore(
+            context: context,
+            saveAction: { context in
+                saveCount += 1
+                try context.save()
+            }
+        )
+
+        do {
+            try store.updateFXRate(freshRate, for: session)
+            Issue.record("Expected a completed-session FX update to be rejected")
+        } catch let error as SessionStoreError {
+            #expect(error == .completedSessionCannotUpdateFXRate)
+        }
+
+        #expect(session.fxRate == 0.05)
+        #expect(session.fxRateDate == originalRateDate)
+        #expect(session.fxSource == "live")
+        #expect(session.fxQuoteDate == "2024-08-31")
+        #expect(session.fxFetchedAt == originalFetchedAt)
+        #expect(saveCount == 0)
+        #expect(!context.hasChanges)
+    }
+
     /// Simulates an exchange-rate save failure and verifies only the attempted
     /// quote fields roll back; unrelated pending edits remain available to the user.
     @Test("A failed FX save restores only quote fields and preserves unrelated edits")
@@ -298,6 +348,7 @@ struct SessionStoreTests {
                 "Menuscript/Services/SessionStore.swift",
                 [
                     "return L10n.string(\"已完成帳單缺少可讀取嘅快照，記錄未有再被修改。\")",
+                    "return L10n.string(\"已完成帳單唔可以更新匯率，記錄未有被修改。\")",
                     "return L10n.string(\"部分菜單記錄未完成儲存，今次未有刪除任何記錄。\")",
                     "return L10n.string(\"未能儲存帳單，請再試一次。（%@）\", detail)",
                     "return L10n.string(\"最新匯率未能儲存，請稍後再試。\")",

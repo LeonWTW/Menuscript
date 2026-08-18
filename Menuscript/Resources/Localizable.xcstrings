@@ -1454,6 +1454,38 @@
         }
       }
     },
+    "完成帳單" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish Bill"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成帳單"
+          }
+        }
+      }
+    },
+    "完成後將無法再修改帳單內容。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You won't be able to edit the bill after finishing it."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成後將無法再修改帳單內容。"
+          }
+        }
+      }
+    },
     "小計" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1518,6 +1550,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已完成帳單缺少可讀取嘅快照，記錄未有再被修改。"
+          }
+        }
+      }
+    },
+    "已完成帳單唔可以更新匯率，記錄未有被修改。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The exchange rate cannot be updated for a completed bill. The record was not changed."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成帳單唔可以更新匯率，記錄未有被修改。"
           }
         }
       }
@@ -2642,6 +2690,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "確定"
+          }
+        }
+      }
+    },
+    "確定要完成帳單？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish this bill?"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確定要完成帳單？"
           }
         }
       }
