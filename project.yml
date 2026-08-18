@@ -1,11 +1,15 @@
+# This XcodeGen manifest is the single source of truth for the generated Xcode project.
+# Keeping build settings here makes every developer regenerate the same app and test targets.
 name: Menuscript
 
+# These shared values define the bundle namespace, source language, and oldest supported iOS version.
 options:
   bundleIdPrefix: com.leonwong
   developmentLanguage: zh-Hant
   deploymentTarget:
     iOS: "17.0"
 
+# Project-wide compiler and release settings keep both targets on the same Swift toolchain and version.
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -14,6 +18,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Automatic
 
+# The application target packages the client-only app; the test target runs against that built app.
 targets:
   Menuscript:
     type: application

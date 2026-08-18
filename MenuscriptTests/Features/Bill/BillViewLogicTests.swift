@@ -12,6 +12,23 @@ import Testing
 @Suite("BillView derived numbers")
 struct BillViewLogicTests {
 
+    @Test("FX rate display preserves usable precision without scientific notation")
+    /// Confirms ordinary and very small positive rates retain a clear, fixed-decimal representation.
+    func fxRateDisplayPrecision() {
+        let cases: [(rate: Double, expected: String)] = [
+            (0.05, "0.05"),
+            (7.8, "7.8"),
+            (0.000065, "0.000065"),
+            (0.00000001, "0.00000001"),
+            (0.000000001, "<0.00000001"),
+            (0.00000002, "0.00000002"),
+        ]
+
+        for testCase in cases {
+            #expect(BillFXPresentation.rateText(testCase.rate) == testCase.expected)
+        }
+    }
+
     @Test("FX refresh failure copy distinguishes Demo Mode coverage from live-network failure")
     /// Confirms Demo Mode and live-network failures give users the appropriate next step.
     func fxRefreshFailureCopyMatchesProviderMode() {

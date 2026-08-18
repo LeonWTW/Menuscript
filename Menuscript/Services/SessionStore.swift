@@ -59,10 +59,14 @@ struct SessionStore {
         }
     }
 
-    /// Persists a refreshed exchange-rate quote as one logical update. If the
-    /// save fails, only the five quote fields touched here are restored; other
-    /// pending edits in the shared UI context remain intact.
+    /// Persists a refreshed exchange-rate quote as one logical update. Completed
+    /// sessions reject late refreshes. If the save fails, only the five quote
+    /// fields touched here are restored; other pending edits remain intact.
     func updateFXRate(_ rate: FXRate, for session: MenuSession) throws {
+        guard !session.isCompleted else {
+            throw SessionStoreError.completedSessionCannotUpdateFXRate
+        }
+
         let previousRate = session.fxRate
         let previousRateDate = session.fxRateDate
         let previousSource = session.fxSource
@@ -143,6 +147,7 @@ struct SessionStore {
 /// Persistence failures grouped by the user operation that could not be completed.
 enum SessionStoreError: Error, LocalizedError, Equatable {
     case completedSessionMissingSnapshot
+    case completedSessionCannotUpdateFXRate
     case sessionsNotPersisted
     case saveFailed(String)
     case fxSaveFailed(String)
@@ -154,6 +159,8 @@ enum SessionStoreError: Error, LocalizedError, Equatable {
         switch self {
         case .completedSessionMissingSnapshot:
             return L10n.string("已完成帳單缺少可讀取嘅快照，記錄未有再被修改。")
+        case .completedSessionCannotUpdateFXRate:
+            return L10n.string("已完成帳單唔可以更新匯率，記錄未有被修改。")
         case .sessionsNotPersisted:
             return L10n.string("部分菜單記錄未完成儲存，今次未有刪除任何記錄。")
         case .saveFailed(let detail):

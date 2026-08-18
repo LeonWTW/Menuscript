@@ -255,3 +255,205 @@ No physical-device, airplane-mode, or live-key smoke test was performed in this 
 ### Defects found during Sprint 4 review and resolution
 
 The initial implementation passed its first full automated run, but a subsequent specification review found four correctness gaps before this verification record was written: a Demo-Mode explanation could overwrite a live-session cache; the target classifier did not honor strings containing `English`; the live-FX factory could be evaluated twice when constructing the Bill; and DEBUG auto-demo waited with a nondeterministic fixed count of 1,000 yields. The implementation now uses the cache provenance guard, `contains("english")` classifier, one `BillFXProviderSelection` resolution, and a cancellation-aware pending-photo wait described above. The final Sol/max specification gate and the independent standards/correctness gate both reported no blocker, P1, or P2 finding. The standards review's only earlier note was low-severity duplication of a test-only wait helper.
+
+## 2026-08-16 — Sprint 5: Dynamic Type (AX3 / AX5) Verification
+
+The peer review of 2026-08-02 (`docs/peer-review-1.txt`) noted that the app declares accessibility-size layout branches but carries no evidence that they were ever exercised, and asked for snapshot or UI tests. This section closes the *verification* half of that gap by hand: a simulator pass at two accessibility text sizes over the five screens a traveller actually uses, with a verdict for each screen at each size and every verdict traceable to a screenshot that was opened and read. It does not close the *automation* half — no snapshot or XCUITest coverage was added, and § Not run below says so.
+
+### Scope & Environment
+
+- **Date:** 2026-08-16. The run continued past midnight, so the retained evidence files carry host timestamps of both 2026-08-16 and 2026-08-17.
+- **Branch:** `sprint-5-professional-completion` at `a41caf6` (`git rev-parse --short HEAD`). **The code under test was uncommitted working-tree state:** the Sprint 5 retention work (`Menuscript/Services/PhotoRetentionPolicy.swift`, `PhotoRetentionService.swift`, the Settings retention section, the MenuView pruned-photo notice) was present in the tree but not committed, so checking out `a41caf6` alone does not reproduce what was photographed here.
+- **Simulator:** a **newly created** device, `Menuscript-AX-DT-20260816` (`EC32402C-8F1B-4D27-9BF8-9828BC6F5F8E`), device type iPhone 17, iOS 26.3 (26.3.1 – 23D8133). It was created for this pass precisely so that no existing device had to be booted, erased, or reset — in particular the device holding the § 2026-07-22 live-Gemini evidence was never named by any command in this pass. Every `simctl` invocation addressed the new UDID explicitly.
+- **Build:** `xcodegen generate` (exit 0), then `xcodebuild build -project Menuscript.xcodeproj -scheme Menuscript -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath <scratch>/dd` → **BUILD SUCCEEDED**, exit 0. Debug configuration, because the `-autoDemo` deep links used to reach screens deterministically are `#if DEBUG`.
+- **Automation channel:** `xcrun simctl ui <UDID> content_size <size>` to set the text size and, run bare, to read it back; `xcrun simctl launch` with the DEBUG launch arguments; `xcrun simctl io <UDID> screenshot` for every image; host-side `cliclick` for the few taps and drags that no launch argument can produce, always followed by a fresh screenshot. **No verdict below rests on an exit code — each one comes from a screenshot that was opened and read.**
+- **Live requests:** none. Every launch passed `-settings.useMockProvider YES`; no Gemini call and no FX fetch was made at any point.
+- **Evidence retained:** 132 screenshots in a scratch directory outside the repository (not committed, consistent with earlier passes); about thirty of them were read in full to produce the verdicts and findings below.
+- **Text-size read-backs** (bare `content_size` prints the current value; taken before each capture group):
+
+```
+$ xcrun simctl ui EC32402C-8F1B-4D27-9BF8-9828BC6F5F8E content_size
+large                                    # before the pass
+accessibility-extra-large                # AX3, before every AX3 capture
+accessibility-extra-extra-extra-large    # AX5, before every AX5 capture
+large                                    # restored after the pass
+```
+
+- **How each screen was reached** (same arguments at both sizes): History — `-settings.useMockProvider YES`; Menu — `-autoDemo YES -settings.useMockProvider YES`; Bill — the same plus `-autoDemoScreen bill`; Settings — `-autoDemo YES -autoDemoScreen settings`; Capture ("Scan Menu") — launched into History, then the floating camera button tapped with `cliclick` and the resulting screen confirmed by screenshot. Long screens were scrolled with short host-side flick drags, one screenshot per flick.
+
+### Verdict criteria (fixed before the pass, applied unchanged)
+
+- **PASS** requires all of: no overlapping elements; every interactive control fully visible or scroll-reachable with a readable label; no text cut mid-glyph; content taller than the viewport is scroll-reachable; and, where an `isAccessibilitySize` branch exists in the source, the adapted layout actually rendered.
+- **CLIPPING/FAIL:** an element partially off its container or off screen with no scroll path to it; overlapping interactive elements; or truncation that loses load-bearing information (price, total, currency code, button meaning).
+- **NOTE, not failure:** a trailing `…` on decorative or repeated text; ugly-but-complete layouts, including hyphenated word wrapping that keeps every character.
+
+### Verdict table
+
+| Screen | How reached | AX3 | AX5 | Notes |
+|---|---|---|---|---|
+| History (Menus) | plain launch, mock provider | **PASS** | **CLIPPING (minor)** | AX5: the floating camera button overlays the last row's status label with no scroll path to clear it — finding D2. Row titles, dates, dish counts and status text are otherwise complete at both sizes. |
+| Capture ("Scan Menu") | camera button tapped from History | **PASS (degraded)** | **PASS (degraded)** | The empty state and all four controls are complete and scroll-reachable at both sizes, but the two side-by-side add buttons wrap into hyphenated multi-line labels — at AX5 "Photo Library" becomes seven lines. Complete, so a note by the criteria above; recorded as finding D4. |
+| Menu (dish list) | `-autoDemo YES` | **PASS** | **PASS (with D1)** | `MenuItemCard`'s accessibility branch (`MenuItemCard.swift:174`) and `CartBar`'s (`CartBar.swift:38,94`) both rendered: price above stepper, full-width Checkout. The last card scrolls clear of the cart bar at AX5, so the bottom `safeAreaInset` (`MenuView.swift:261`) is doing its job. AX5: the cart bar's converted total wraps mid-number — finding D1. |
+| Bill | `-autoDemoScreen bill` | **PASS** | **PASS (with D3)** | All three `isAccessibilitySize` branches rendered — surcharge controls stacked (`BillView.swift:242`), total hero (`:455`) and per-person hero (`:544`) label-above-amount. Subtotal, surcharge, total, per-person, currency codes and the FX provenance line are complete at both sizes. AX5: the people stepper's value wraps between its − and + buttons — finding D3. |
+| Settings | `-autoDemoScreen settings` | **PASS** | **PASS** | Scrolled end to end at both sizes, including the new **Menu Photo Retention** section: the "Keep photos for / 30 days" picker and its full footer render complete at AX5, as do "Clear All Menus" and the version line. AX5 note: the Language row's value truncates to `Follo…ystem` — the selection is still identifiable, so a note, not a failure. |
+
+### Findings (documented, not fixed in this pass)
+
+| # | Finding | Where | Severity | Judgment |
+|---|---|---|---|---|
+| D1 | At AX5 the cart bar's converted total wraps in the middle of the number, rendering as `$11.2` on one line and `5` on the next. Nothing is lost — the yen original `¥1800` and the dish/quantity summary are intact — but a split price is exactly the kind of number a user reads at speed. | `Menuscript/Features/Menu/Components/CartBar.swift` (the summary block inside the accessibility branch at `:38`) | Low, cosmetic | Note, not a failure: complete but degraded. A `minimumScaleFactor` or a line-break-mode on the amount would fix it. |
+| D2 | At AX5 the History list's floating camera button sits on top of the last row's "Unfinished" status text, and the list has no compensating bottom inset, so the covered text cannot be scrolled clear. The row is still tappable outside the button and the same state is also carried by the clock icon and the section grouping. | `Menuscript/App/RootView.swift:60` — `.overlay(alignment: .bottomTrailing)` with no bottom `safeAreaInset`, in contrast with `MenuView.swift:261`, which does inset for its cart bar | Low | The only verdict in this pass recorded as clipping. The fix is the pattern the Menu screen already uses. |
+| D3 | At AX5 the "Split the Bill" stepper's value wraps to two lines (`2` / `peo-ple`) and the wrapped text runs flush against the − and + controls. The controls remain distinct and tappable; the value is readable. | `Menuscript/Features/Bill/BillView.swift`, the people stepper row (the neighbouring hero blocks at `:455` and `:544` do reflow; this row does not) | Low | Note, not a failure. Worth reflowing for consistency with the two heroes directly below it. |
+| D4 | The Capture screen's two add buttons are laid out in a fixed `HStack` that never reflows for accessibility sizes, so their labels hyphenate down to a few characters per line — "Photo Library" over five lines at AX3 and seven at AX5. Every character is present and all four controls stay scroll-reachable. | `Menuscript/Features/Capture/CaptureView.swift:250-278` (`addButtons`); this file has no `dynamicTypeSize` branch at all, unlike `BillView`, `MenuItemCard` and `CartBar` | Low–medium | Note by the fixed criteria (complete, reachable), but the worst-looking screen of the pass and the clearest candidate for the next accessibility change: stack the two buttons vertically when `dynamicTypeSize.isAccessibilitySize`. |
+
+No layout code was changed in this pass. These are recorded as findings so that the next accessibility change starts from observed behaviour rather than a re-run of the same manual work.
+
+### Harness limitations and artifacts
+
+Recorded because each one changes what the evidence proves, and because the same automation channel misled an earlier pass (§ 2026-07-26, issue 5):
+
+1. **The drag automation typed into the app.** During the first Settings scroll at AX3, a drag focused the Gemini model text field; the software keyboard then appeared under the next drag's start point, and three drags landed on the `g` key, inserting `ggg` into the model field. The app was uninstalled and reinstalled on the scratch device to reset all state, and the Settings pass was re-run from a clean install. No later screenshot in this record comes from the polluted state.
+2. **A slow drag reads as a long press.** One Menu drag at AX5 produced the system Copy/Share text-selection callout instead of a scroll. Subsequent scrolling used quick flicks (short press dwell), and every flick was confirmed by a fresh screenshot.
+3. **Right-edge horizontal drags trigger the system back affordance,** not the app. One attempt at scrolling the category chip row produced the OS "Back" HUD.
+4. **Horizontal scrolling of the category chip row could not be demonstrated.** At both sizes the trailing category chip is cut off at the right edge. The source shows the row is a horizontal `ScrollView` (`Menuscript/Features/Menu/Components/CategoryChipsBar.swift:21`), so it should be reachable, but two further drag attempts moved it not at all, and synthetic scroll-wheel events (`CGEvent(scrollWheelEvent2Source:)` posted over the Simulator window) had no effect on the Simulator whatsoever. This is therefore recorded as **not observed** — neither a pass nor a defect.
+5. **All later drags ran in the left margin of the screen,** outside the row cards, which is the only reliable way found to scroll a `Form` without focusing one of its text fields.
+
+### Not run / not observed
+
+| Item | Reason |
+|---|---|
+| Physical-device Dynamic Type | Not available in this environment. Simulator text-size rendering is a good proxy but not identical (fonts, safe areas, and the OS keyboard differ). |
+| VoiceOver at accessibility sizes | Enabling VoiceOver would take over the touch model that drove every gesture in this pass. The accessibility labels themselves are covered by source evidence in § 2026-07-26 and by unit tests, not by this pass. |
+| Horizontal scrolling of the category chip row | See harness limitation 4 — attempted, not achieved, not claimed. |
+| The explanation sheet, the photo gallery, and the pruned-photo notice alert at AX sizes | Out of scope for this pass, which covered the five main screens; each needs a tap sequence that this channel can produce only unreliably. |
+| The Camera and Photo Library flows themselves | The simulator has no capture device, and the library picker is out-of-process; only the buttons that open them were verified. |
+| AX1, AX2, AX4 | Only the two ends of the accessibility range were exercised, on the assumption that AX3 and AX5 bracket the intermediate sizes. |
+| The Sprint 4 physical-device and network smoke checklist (§ 2026-08-02) | Still **Pending**, unchanged by this pass. Nothing in this section alters those six cases. |
+
+### Status
+
+Dynamic Type is now **verified on the simulator at AX3 and AX5 for History, Capture, Menu, Bill and Settings**, with one minor clipping verdict (D2) and three complete-but-degraded layouts recorded (D1, D3, D4). The three screens that carry explicit `isAccessibilitySize` branches were confirmed to actually take those branches at both sizes, which is the specific claim the peer review said was unevidenced. What remains open is automation: this pass cost an engineer-hour-scale manual effort that a snapshot test at two text sizes would repeat for free, and that automation — not another manual pass — is the right next investment.
+
+## 2026-08-16 — Sprint 5: Photo Retention Pruning Verification
+
+This section verifies the behaviour the peer review of 2026-08-02 (`docs/peer-review-1.txt`) named its highest-priority recommendation: that original menu photos should not be kept indefinitely. The unit suite already proves the rules in isolation (`MenuscriptTests/Services/PhotoRetentionServiceTests.swift`, eleven tests). What this pass adds is the part a unit test cannot show — that a real session, finalized through the UI and then aged past the window, actually loses its photos on the next launch, keeps its settled bill byte-for-byte, and says so on screen.
+
+It is a companion to the Dynamic Type section above, not a replacement: the two passes ran in the same Sprint 5 session on two separate, newly created simulators.
+
+### Scope & Environment
+
+- **Date:** 2026-08-16 session. The work itself ran in the early hours of **2026-08-17** host time, which is why every timestamp read out of the store below says `2026-08-17` and the seeded sessions are dated *Monday, Aug 17*.
+- **Branch:** `sprint-5-professional-completion` at `a41caf6` (`git rev-parse --short HEAD`). **The code under test was uncommitted working-tree state** — `Menuscript/Services/PhotoRetentionPolicy.swift`, `PhotoRetentionService.swift`, `MenuSession.photosPrunedAt`, the Settings retention section and the `MenuView` pruned-photo notice were all present in the tree but not committed. Checking out `a41caf6` alone does not reproduce what is recorded here.
+- **Simulator:** a **newly created** device, `Menuscript-Prune-20260816` (`C4AE78A5-1B47-4339-BDEF-0670449F5257`), device type iPhone 17, iOS 26.3 (26.3.1 – 23D8133). It was created for this pass so that no existing device had to be booted, erased, or reset; in particular the device holding the § 2026-07-22 live-Gemini evidence was never named in any command. Every `simctl` call addressed this UDID explicitly, and the device was left shut down (not deleted) so the seeded store stays inspectable.
+- **Build:** `xcodegen generate` (exit 0), then `xcodebuild build -project Menuscript.xcodeproj -scheme Menuscript -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath <scratch>/dd` → **BUILD SUCCEEDED**, exit 0. Debug configuration, because the `-autoDemo` seeding path is `#if DEBUG`.
+- **Automation channel:** `xcrun simctl launch` with DEBUG launch arguments to create sessions; host-side `cliclick` for the taps that reached the cart, the Bill and the Done button, with a fresh `xcrun simctl io … screenshot` after every tap; `sqlite3` against the app container's store, always with the simulator shut down, for the state that no screen shows. **No verdict below rests on an exit code** — each one comes from a screenshot that was opened and read, or from a pasted `SELECT`.
+- **Live requests:** none. Every launch passed `-settings.useMockProvider YES`; no Gemini call and no FX fetch was made at any point.
+- **Evidence retained:** 18 images in a scratch directory outside the repository (not committed, consistent with earlier passes) — 17 device screenshots plus one host-window capture used to calibrate the tap coordinates — together with the before/after hex dumps of the completed session's bill snapshot.
+
+### Where seeding was required, and why
+
+A 30-day retention window cannot be reached by waiting, and the app has no control that changes a session's creation date. Both shortcuts are recorded here because they change what the result proves:
+
+1. **Ageing.** Three sessions were created through the DEBUG auto-demo path, one of them then completed through the UI (see P1 below). With the simulator **shut down** — a booted device caches the store and would overwrite an external edit — two rows were backdated by exactly 31 days:
+   `UPDATE ZMENUSESSION SET ZCREATEDAT = ZCREATEDAT - (31*86400) WHERE Z_PK IN (1,3); PRAGMA wal_checkpoint(TRUNCATE);`
+   Row 3 is the completed session (the case under test); row 1 is a draft (the do-no-harm case). Row 2 was left at today's date as the second control. Nothing else in the store was edited at any point — no lifecycle status was faked, and no snapshot was fabricated.
+2. **Reading `photosPrunedAt` and the snapshot bytes.** Neither is visible in the UI, so both were read with `sqlite3` (`ZPHOTOSPRUNEDAT`, `ZBILLSNAPSHOTDATA`) before and after each run.
+
+Store state **before** the launch that pruned (`Z_PK | status | createdAt | photosPrunedAt | length(photos) | length(billSnapshot)`):
+
+```
+1|draft|2026-07-17 07:38:55|0|1113|
+2|draft|2026-08-17 07:39:04|0|1113|
+3|completed|2026-07-17 07:39:13|0|1113|578
+```
+
+### Test Cases
+
+| ID | Case | Verdict |
+|---|---|---|
+| P1 | A completed, aged session loses its photos and keeps its bill | **PASS** (with the notice *alert body* not observed — see below) |
+| P2 | Do no harm: an aged draft and a same-day draft keep their photos | **PASS** |
+| P3 | The prune is idempotent and survives a relaunch | **PASS** |
+
+**P1 — a completed session aged past the window is pruned, and its settled bill is not.**
+
+*Steps.* Three demo sessions were created (`-autoDemo YES -settings.useMockProvider YES`). One of them was then completed by hand: open the session, tap `+` twice on *Grilled eggplant* (cart shows `Dishes: 1 · Qty: 2`, `≈ $6.25 ¥1000`), tap **Checkout**, and tap **Done** on the Bill sheet. History moved that session into **Completed** and no error alert appeared — the post-finalize prune trigger (`RootView.swift:45-50`) therefore ran cleanly on a store with nothing yet eligible. Its Menu screen was screenshotted showing the ordinary **photo-stack** toolbar button. The session was then backdated 31 days as described above, and the app relaunched with `-settings.useMockProvider YES` only (no `-autoDemo`, so nothing new could shadow the seeded rows).
+
+*Expected.* On next launch the session's photos are deleted, `photosPrunedAt` is stamped, the toolbar button becomes the pruned-photos notice, and the completed bill, its dishes and the session metadata are unchanged.
+
+*Observed — all four.* Store state after the launch:
+
+```
+1|draft|2026-07-17 07:38:55||1113|
+2|draft|2026-08-17 07:39:04||1113|
+3|completed|2026-07-17 07:39:13|2026-08-17 07:43:16|219|578
+```
+
+Row 3's `ZPHOTOSPRUNEDAT` is now stamped and `length(ZPHOTOS)` fell from 1113 to 219 bytes — consistent with the archived form of the empty array that `session.photos = []` writes. The column is not zero-length afterwards, and this section does not claim it is. `length(ZBILLSNAPSHOTDATA)` is still 578, and a hex dump of those bytes taken before the prune and again afterwards is **byte-identical** (`shasum` of both dumps: `faab8d3d2ecc4dd34cf1cb8790ebbc8e361398e4`). The session still has its 10 `MenuItem` rows with the same total quantity of 2, and its title, people count and FX rate are unchanged (`鷹の目`, `2`, `0.00625`). On screen, the same session's toolbar button had changed from `photo.stack` to the `photo.badge.exclamationmark` notice button, while the completed order itself still read *Grilled eggplant ×2*, `≈ $6.25 / ¥1000`, with the untouched dishes still marked *Not included in the completed order*. No error alert appeared at any launch.
+
+**P2 — do no harm.** The draft backdated by the same 31 days (row 1) and the same-day draft (row 2) both still show `length(ZPHOTOS) = 1113` and a `NULL` `photosPrunedAt` in the read-back above, and a draft's Menu screen still offers the ordinary photo-stack gallery button. Draft protection is therefore observed, not merely coded: the only difference between row 1 and row 3 was the lifecycle status and the presence of a bill snapshot.
+
+**P3 — idempotent and durable.** The app was launched a second time and the store re-read after shutdown: `photosPrunedAt` still reads `2026-08-17 07:43:16` (the first prune's timestamp, not a fresh one), `length(ZPHOTOS)` is still 219, and the snapshot dump still hashes to `faab8d3d…`. The second pass therefore found nothing to do and wrote nothing, and the pruned state survived a relaunch.
+
+### Harness limitations and artifacts
+
+1. **The pruned-photos alert body was never displayed.** Three attempts (single click, repeated click, explicit press-and-release with a dwell) at the notice button's coordinates produced no alert. The same coordinates then failed to trigger *the existing photo-gallery button* on a draft session and the navigation **Back** button — both long-standing, working controls. Host taps in the top toolbar row simply did not register on this device, while taps lower on the screen (rows, steppers, Checkout, the Bill's Done button) all landed on the first or second try. This is therefore recorded as a limitation of the tap channel, **not** as evidence about the notice button, and the alert's title and message (`菜單相片已自動清理` / `原始菜單相片已按「保留期限」設定自動清理…`) remain source-only claims (`Menuscript/Features/Menu/MenuView.swift:178-182`). The *icon swap*, which is the part that tells a user their photos are gone, was observed.
+2. **The demo photo data is small enough to be stored inline.** The container has no `_EXTERNAL_DATA` directory, so no on-disk file-size reclamation could be measured and none is claimed; the evidence for reclamation here is the `photos` column shrinking, plus the `@Attribute(.externalStorage)` declaration in the model. A real capture is the size class `externalStorage` exists for, but producing one needs the physical camera or a photo-library import that this channel cannot drive. Its magnitude was instead measured directly, on 2026-08-17, from the SwiftData stores of earlier simulators (copied out and read with `sqlite3` + `plistlib`; no device was booted or modified): the § 2026-07-22 live handwritten-menu session holds one **1200×1600 JPEG of 447,516 bytes (437 KB)**, and a second live session one 1188×1584 JPEG of 306,367 bytes. That is the persisted size class — note that 2,560 px (`Menuscript/Services/ImagePrep.swift:24`) is only the *decode* bound; what is saved is re-encoded at a 1,600 px long edge at quality 0.7 (`ImagePrep.swift:28`), which both measurements confirm.
+3. **The window itself was not varied.** Everything above was observed with the default 30-day policy. The 90-day and keep-forever options, and the failure paths, were exercised only by the unit suite.
+
+### Not run / not observed
+
+| Item | Reason |
+|---|---|
+| The pruned-photos alert's title and message on screen | Harness limitation 1 — attempted three times, not achieved, not claimed. |
+| The 90-day and keep-forever settings end to end | The same code path with a different constant: the window values are pinned by `PhotoRetentionPolicyTests` and `.forever` by the service's no-op test ("Keep forever performs no database work at all"). Repeating the pass at 91 days would re-exercise what was already observed here. |
+| Changing the retention setting in Settings and watching a prune follow | The Settings picker itself was seen rendering (§ 2026-08-16 Dynamic Type, Settings row), but the setting was left at its default for this pass. |
+| The failure paths (`PhotoRetentionError.fetchFailed` / `.saveFailed`) and their alert | Reachable only by injecting a throwing store; covered by two unit tests that assert the typed error and that every photo survives. |
+| Storage actually reclaimed on disk | See harness limitation 2. |
+| Physical-device behaviour | Unchanged from every earlier section: the app has still never run on hardware. |
+| The Sprint 4 physical-device and network smoke checklist (§ 2026-08-02) | Still **Pending**, unchanged by this pass. |
+
+### Status
+
+Retention is **verified end to end on the simulator for the default 30-day policy**: an aged completed session is pruned, its immutable bill is byte-identical afterwards, aged drafts and same-day sessions are untouched, the prune is idempotent and durable across relaunch, and the UI distinguishes a pruned session from one that never had photos. Two gaps are named rather than glossed: the notice alert's text was not driven on screen, and no on-disk byte reclamation was measured because the demo photos are stored inline.
+
+## 2026-08-18 — Sprint 5 Final Safety and Completion Addendum
+
+This addendum records the frozen Sprint 5 state after an adversarial review found that the first retention implementation treated any non-`nil` snapshot bytes as sufficient evidence that the settled bill was recoverable. It also records the three small completion hardening items accepted before code freeze. Earlier dated sections remain historical evidence; the points below say exactly which evidence still applies and which behavior is new.
+
+### Final automated verification — PASS
+
+| Check | Evidence and observed result |
+|---|---|
+| Full frozen suite | **PASS — 2026-08-18.** 201 Swift Testing tests across 35 suites plus 41 XCTest tests = **242 total**, 0 failures. Exact `xcodebuild` result: `** TEST SUCCEEDED **`. The earlier 195 + 41 = 236 figure was the pre-safety checkpoint, not the final count. |
+| Retention production fixtures | Every positive prune fixture now creates a deterministic selected-item session, captures it with `BillSnapshot.capture(from:completedAt:)`, and encodes it with `BillSnapshotCodec.encode`, matching production finalization. The old `Data("{\"v\":1}".utf8)` value remains only as deliberately corrupt negative input. |
+| Retention invalid-state protection | Four new regression tests cover an expired corrupt snapshot, an expired unsupported-version snapshot, a mixed valid/corrupt batch, and an all-invalid batch. They assert that invalid records keep their photos and prune stamp unchanged; the mixed batch still prunes the valid record in one save, while the all-invalid batch saves nothing. |
+| Completed-session FX write guard | A regression calls `SessionStore.updateFXRate` on a completed session and asserts exact `SessionStoreError.completedSessionCannotUpdateFXRate`, all five FX fields unchanged, zero save calls, and no pending context changes. The store throws before reading/mutating those fields. `BillView` retains its independent post-`await` completion recheck and suppresses only that expected typed race; generic persistence errors still alert. |
+| Small-rate presentation | Parameterized coverage pins ordinary values, a small value, the exact `0.00000001` threshold, a positive value below it, and a value just above it. Output is POSIX fixed-decimal with at most eight fractional digits and trimmed trailing zeros; a positive value below the threshold is `<0.00000001`. |
+
+### Why the 2026-08-16 retention pass remains applicable
+
+The session in § *Sprint 5: Photo Retention Pruning Verification* was finalized through the production UI and held a real, readable v1 snapshot. The final safety change does not alter that eligible path: it strengthens the filter by requiring the stored snapshot to decode through the same production codec before `photos` is loaded and cleared. Its observations therefore remain valid for a readable completed bill — photo removal, `photosPrunedAt`, byte-identical bill data, draft protection, and relaunch durability.
+
+That earlier pass does **not** prove the new invalid-snapshot behavior. Missing/corrupt/unsupported, mixed valid/corrupt, and all-invalid/no-save cases are automated unit evidence only. At the 2026-08-16 checkpoint the service suite had eleven tests; the four safety regressions above bring the final retention-service coverage to fifteen. This scope boundary is explicit so the earlier manual result is not silently stretched over behavior it never exercised.
+
+### Draft-finalization confirmation — manual PASS
+
+- **Date/environment:** 2026-08-18, iPhone 16e simulator, iOS 26.3, English UI, offline Demo Mode. No live Gemini or FX request was part of this pass.
+- **Dialog:** On an editable draft Bill, tapping **Done** displayed the English finalization confirmation dialog.
+- **Cancel/outside path:** Dismissing through the outside/cancel path left the draft on the editable Bill screen. The people count could still be changed from **2 → 3**, directly confirming that cancellation had not finalized the session.
+- **Confirm path:** Opening the dialog again and choosing **Finish Bill** used the existing finalization path, returned to History, and showed the session under **Completed**.
+- **Completed-session behavior:** The implementation retains the pre-existing direct-dismiss behavior for Done on an already completed bill; this pass specifically observed the two draft branches above.
+
+### Still pending / not inferred
+
+| Item | Final status |
+|---|---|
+| Physical-device smoke, including real camera and on-device performance | **Pending.** Menuscript has still not been run on physical hardware. |
+| Airplane-mode device validation for the Sprint 4 offline guarantee | **Pending.** Simulator/unit evidence does not substitute for a radio-isolated device run. |
+| Formal live-Gemini-key path, including first-use disclosure/cancel/accept cases | **Pending.** The informal 2026-07-22 simulator spot-check remains useful historical evidence, but it does not close the formal cases 1–2 or a current physical-device live-key smoke. |
+| Pruned-photo notice alert body on screen | **Pending.** The icon swap was observed on 2026-08-16; the alert title/body still has source and localization coverage only because the toolbar tap did not land. |
+| Actual external-storage disk reclamation | **Pending.** The demo payload's encoded column shrank, but no external file-size reduction was measured. |
+| 90-day / keep-forever end-to-end behavior and injected retention failure alerts | **Pending at manual level.** These remain unit-covered only, as recorded in the 2026-08-16 section. |
+
+The final 242-test pass, the narrow C2 simulator pass, and the earlier valid-snapshot retention evidence complete the frozen automated/simulator evidence claimed for Sprint 5. None of the pending device, live-key, alert-body, or storage-reclamation work is represented as passed.

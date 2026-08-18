@@ -128,7 +128,7 @@ The review focus this sprint was failure behavior at the new persistence boundar
 
 ### Sprint 2 Review Carry-overs
 
-Of the two findings I postponed in Sprint 2: **(4) FX rate provenance is now delivered** — `MenuSession.fxSource` (live/cached/manual/mock) is persisted, frozen into the completed-bill snapshot, and shown in the bill UI, so a completed bill permanently shows which kind of rate produced its totals. **(3) Dynamic Type at AX3+ remains open honestly**: the layout code has had `isAccessibilitySize` branches since the original prototype, but the finding was about *verification* at those sizes, and that verification is still pending — I am not marking it closed on the strength of code that hasn't been exercised.
+Of the two findings I postponed in Sprint 2: **(4) FX rate provenance is now delivered** — `MenuSession.fxSource` (live/cached/manual/mock) is persisted, frozen into the completed-bill snapshot, and shown in the bill UI, so a completed bill continues to show which kind of rate produced its totals while that session is retained. **(3) Dynamic Type at AX3+ remains open honestly**: the layout code has had `isAccessibilitySize` branches since the original prototype, but the finding was about *verification* at those sizes, and that verification is still pending — I am not marking it closed on the strength of code that hasn't been exercised.
 
 ### An Engineering Decision That Was Mine
 
@@ -178,7 +178,7 @@ Automated evidence after the `L10n` fix: `xcodebuild test` on iPhone 17 / iOS 26
 
 ## 2026-08-02 — Sprint 4: Demo-Mode Offline Guarantee and Quality Seams
 
-Sprint 4 completes a capability, rather than adding an unrelated screen: the Demo Mode promise is now an enforceable runtime guarantee. When the toggle is on, a persisted live session cannot route recognition, dish explanation, or bill FX to a real provider. The work is recorded as three single-purpose commits on `sprint-4-quality`, based on `origin/main` `d5794d6`; the branch has not yet been merged into `main`.
+Sprint 4 completes a capability, rather than adding an unrelated screen: the Demo Mode promise is now an enforceable runtime guarantee. When the toggle is on, a persisted live session cannot route recognition, dish explanation, or bill FX to a real provider. At this dated checkpoint the work was recorded as three single-purpose commits on `sprint-4-quality`, based on `origin/main` `d5794d6`, and had not yet been merged; it was subsequently merged by PR #8 at `a740bc0`.
 
 ### AI implementation assistance and test generation
 
@@ -209,6 +209,120 @@ I rejected a proposed F5 SwiftUI wiring test that tried to prove the dependency 
 
 ### Verification after AI work
 
-I independently regenerated the ignored Xcode project with `xcodegen generate`, then ran the full suite on the iPhone 17 Pro simulator running iOS 26.3.1. The result was **Passed**: 220 total tests and 220 passed, with 245 device-dynamic runs; 0 failed, 0 skipped, and 0 expected failures. The two focused F2 direct-photo tests also passed under a 10-iteration repetition, and the focused FX suite passed 18/18 after its expected-rate table was expanded to assert all 15 added USD quotes exactly. Final `git diff --check` was clean.
+At this historical Sprint 4 checkpoint, I independently regenerated the ignored Xcode project with `xcodegen generate`, then ran the full suite on the iPhone 17 Pro simulator running iOS 26.3.1. The result was **Passed**: 220 total tests and 220 passed, with 245 device-dynamic runs; 0 failed, 0 skipped, and 0 expected failures. The two focused F2 direct-photo tests also passed under a 10-iteration repetition, and the focused FX suite passed 18/18 after its expected-rate table was expanded to assert all 15 added USD quotes exactly. Final `git diff --check` was clean.
 
 This is automated simulator evidence, not a substitute for hardware and network observation. The physical-device camera/UI, airplane-mode/no-key isolation, and live-key smoke cases for F1–F6 remain **Pending** and are enumerated exactly in `docs/manual-verification.md` (§ 2026-08-02). I have not represented them as passed.
+
+## 2026-08-16 — Sprint 5: Responding to the First External Peer Review
+
+Sprint 5 is the first round of work in this project driven by feedback from someone other than me. Exactly one peer review was received: `docs/peer-review-1.txt`, written on 2026-08-02 against `sprint-4-quality` at `41df014` / `d5794d6`. It was positive overall and carried five actionable items. My dispositions, each explained below:
+
+| The reviewer's item | Disposition |
+|---|---|
+| Implement a data retention / pruning strategy for stored photos — the review's own **highest priority** | **Implemented** |
+| Mirror the app's folder structure inside the flat `MenuscriptTests/` directory | **Implemented** |
+| Centralize the `xcodegen` / `xcodebuild` commands into the root README | **Declined**, on a premise I checked and found false |
+| Dynamic Type at AX3+ is unverified; add snapshot or UI tests | **Verification done by hand and documented; automation not added** |
+| Migrate the `osascript` / `cliclick` automation to a native XCUITest target | **Postponed again**, with the condition that flips it recorded |
+
+### AI implementation assistance and test generation
+
+I ran this sprint the way I ran Sprint 4: the acceptance contract was written before any implementation, and the implementation and its tests were produced by scoped Claude Code agents working against that contract, one concern per agent, each required to report a real command, its exit code, and its output. What I kept for myself was the scope — what the retention rule should protect, what the default should be, and what would count as evidence.
+
+The accepted work is deliberately narrow. Retention landed as two new files, `Menuscript/Services/PhotoRetentionPolicy.swift` (the storable `30d` / `90d` / `forever` choice and its window) and `Menuscript/Services/PhotoRetentionService.swift` (the throwing boundary that performs the prune), one new optional model field (`MenuSession.photosPrunedAt`), one Settings section, one `MenuView` notice button, and two call sites in `RootView`. The reorganization moved 31 test files with `git mv` into `App/`, `Features/`, `Models/`, `Resources/`, `Services/` and `Support/`.
+
+Numbers, re-measured on the working tree rather than quoted from the review: at this **pre-safety Sprint 5 checkpoint**, the suite declared **236** tests — 195 Swift Testing `@Test` plus 41 XCTest `func test` — of which 16 were new (`PhotoRetentionPolicyTests` 5, `PhotoRetentionServiceTests` 11). Subtracting those gives 179 + 41 = the reviewer's historical **220**, so their number was accurate for the code they read. The checkpoint run after the test files moved was green: `Test run with 195 tests in 35 suites passed`, `Executed 41 tests, with 0 failures (0 unexpected)`, `** TEST SUCCEEDED **`. This is not the frozen total; the 2026-08-18 addendum records 201 + 41 = 242 after the safety and hardening regressions.
+
+Two review-shaped decisions inside that work are worth recording, because in both cases the first idea was worse:
+
+1. **The prune had to be unable to damage a settled bill.** The service writes exactly two fields, `photos = []` and `photosPrunedAt`, inside a short-lived `ModelContext` with `autosaveEnabled = false`, so a failed save is discarded whole and the UI's autosaving context never commits a partial prune — the same discipline `SessionStore.persistDeletion` already used. The proof I asked for was not "the code looks right" but a test that re-fetches through a *fresh* context after pruning and asserts the bill snapshot is byte-identical and every dish unchanged. The later adversarial review below found that the first eligibility check was still too weak and tightened it before freeze.
+2. **Photos are expendable only after the bill is actually readable.** Final eligibility requires `completed` *and* a snapshot that decodes through the production codec as a version this app understands. Drafts, sessions saved before the lifecycle field existed, and completed sessions with missing, malformed/corrupt, or unsupported snapshot data are all skipped, because for those the photos remain the recovery evidence. A non-`nil` blob is not treated as proof of recoverability.
+
+### One recommendation I declined on the evidence
+
+The review asked for the `xcodegen generate` and `xcodebuild test` commands to be centralized into the root README, on the basis that they were scattered through the verification documents. I checked the README **at the revision that was reviewed** before acting on it:
+
+```
+$ git show d5794d6:README.md | grep -nE 'Quickstart|xcodegen generate|xcodebuild test'
+46:## Quickstart
+53:xcodegen generate
+65:xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript \
+```
+
+The Quickstart section, with both commands, already existed at the reviewed commit, so there was nothing to centralize and I made no change. I want to be fair about why the miss is understandable: those commands genuinely do also appear inside the verification logs, which is where a reviewer reading for engineering evidence spends their time, and an attentive reviewer failing to find the Quickstart is itself a small signal about discoverability. But accepting a recommendation without checking its premise would be the same failure mode as accepting AI output because it sounds right — which is the discipline the rest of this document is about.
+
+### One suggestion postponed again
+
+Migrating the host-driven automation into a committed XCUITest target stays postponed a second time. § 2026-07-26 records the first decision, which named it as Sprint 4 work; Sprint 4 did not take it up, and `project.yml` still declares no UI-test target.
+
+I want to concede the reviewer's premise fully, because this sprint produced two more pieces of evidence for it, not against it. The Dynamic Type pass had a drag focus a text field and then type `ggg` into it through the software keyboard, forcing a reinstall and a re-run (`docs/manual-verification.md`, § 2026-08-16 Dynamic Type, harness limitation 1). The retention pass could not get a tap to register anywhere in the top toolbar row — not on the new pruned-photos notice, and not on the pre-existing photo-gallery and Back buttons either — so the notice alert's text is recorded as *not observed* rather than passed (§ 2026-08-16 Photo Retention, harness limitation 1). The channel is exactly as fragile as the review says.
+
+The reason to postpone anyway is coverage, not disagreement. What actually carried this sprint's evidence was the part XCUITest cannot see: the contents of the SwiftData store read with `sqlite3`, a row aged 31 days by editing that store with the simulator shut down, the *absence* of any network request, and the byte-for-byte equality of a bill snapshot before and after a destructive operation. Rebuilding this as an in-process UI test would trade a completed, honestly-disclosed pass for a partial automated one that proves less. The condition that flips the decision is recorded plainly, and it is the reviewer's own argument: a CI pipeline, or a second contributor who cannot be asked to reproduce a manual pass. Either one makes automated coverage worth more than the depth it costs, and § 5 of `docs/sprint_5/peer-review-reflection.md` names it as the next engineering priority.
+
+### An engineering decision that was mine
+
+**Closing the Dynamic Type finding by verification rather than by adding a dependency.** The review asked for snapshot tests or formal UI testing at AX sizes. The app has zero third-party runtime dependencies, and a snapshot-testing library is a real, permanent addition to a project that has so far needed none. More to the point, the finding — first raised by my own AI review in Sprint 2 (§ *AI Engineering Review*, issue 3) and repeated by this reviewer — was that the accessibility behaviour was **unverified**, not that the code was missing: the `isAccessibilitySize` branches have existed since the original prototype. So I spent the effort on evidence instead: a documented simulator pass at AX3 and AX5 across five screens, with fixed pass/fail criteria written before the pass and every verdict traced to a screenshot that was opened and read. It confirmed the specific claim the review said was unevidenced — the three branch-carrying screens do take their accessibility branches — and it found four real layout issues, one of them a clipping verdict, that no green test suite had reported. That is not a permanent substitute for automation, and the section says so; it is the cheaper half done first.
+
+The other judgment that was mine is the **shape** of the retention feature: prune photos rather than sessions, keep the immutable snapshot untouched, default to 30 days but let the user choose 90 or forever, protect anything unfinished or lacking a currently decodable/supported snapshot, and add no size budget. The review recommended a threshold; deciding what a threshold may and may not delete — and that an irreversible deletion should err generous and be disclosed in the UI rather than happen silently — is a product call.
+
+### Verification after AI work
+
+I did not accept the agents' reports as evidence:
+
+- **The pre-safety suite checkpoint.** Re-measured from the working tree, not quoted: 195 `@Test` + 41 `func test` = 236 declarations, and that checkpoint's green run reported the same 195 and 41 at runtime, ending `** TEST SUCCEEDED **`. The reorganization showed 31 tracked renames, and comparing declaration counts before and after ruled out a silently dropped file. The frozen count is higher and is recorded in the addendum below.
+- **The retention behaviour.** Verified by hand end to end on a purpose-created simulator, not inferred from the unit tests: a session finalized through the UI, aged 31 days in the store, then pruned on the next launch — `photosPrunedAt` stamped, the photo column shrunk, the bill snapshot byte-identical by `shasum`, the aged draft untouched, the state still correct after a second relaunch. The full record, including both shortcuts and both gaps, is in `docs/manual-verification.md` (§ 2026-08-16 Photo Retention).
+- **The claims in these documents.** Every file:line citation added to `docs/architecture.md` and to the retention verification section was re-read in the working tree at the time of writing, the retention wording in `README.md` was checked against the landed policy rather than the plan for it, and the `git show d5794d6:README.md` output above was re-run rather than remembered.
+- **What is still not proven.** The pruned-photos alert body was never displayed on screen; no on-disk byte reclamation was measured, because the demo photo data is small enough that SwiftData keeps it inline; the 90-day and keep-forever windows and the two failure paths are covered only by unit tests; and the physical-device work outstanding since Sprint 3 is unchanged. None of this is represented as passed.
+
+## 2026-08-18 — Adversarial Safety Review and Final Code Freeze
+
+The first Sprint 5 retention pass was green and had manual valid-session evidence, but a final adversarial review challenged the premise behind deletion rather than only checking the mutation. That review found one release-blocking mismatch between the intended safety invariant, the implementation, and its fixtures.
+
+### The unsafe assumption the green tests encoded
+
+The first service filter asked only whether `billSnapshotData != nil`. Its positive tests supplied `Data("{\"v\":1}".utf8)`, but production `BillSnapshotCodec.decode` expects a complete `version` envelope and a complete v1 `BillSnapshot`; that fake blob could never be produced by `SessionStore.finalize` or rendered as a settled bill. In other words, the tests were proving that malformed bytes were *eligible* for irreversible photo deletion. A completed row could therefore lose the only readable evidence of the meal while `billState` correctly reported the bill itself as unreadable.
+
+The accepted fix was deliberately smaller than a new recovery subsystem:
+
+- Keep the cheap scalar checks first (`completed`, not already pruned, inclusive age from `createdAt`).
+- Require `session.billSnapshot != nil` next, reusing the canonical `billState` → `BillSnapshotCodec.decode` classification so missing, malformed/corrupt, and unsupported-version data all fail closed.
+- Load external photo data only after the snapshot is known to be readable.
+- Replace every positive fixture with deterministic production-path capture + codec bytes. Retain the old fake blob only as a corrupt negative input, and derive an unsupported version from valid encoded JSON.
+- Add four regressions: corrupt, unsupported, mixed valid/corrupt, and all-invalid/no-save. The mixed case proves a valid record can still be pruned without touching the invalid one in the same batch; the all-invalid case proves no persistence write occurs.
+
+This is the responsible-AI lesson of the sprint: a generated test can be internally consistent and still certify the wrong invariant. The corrective action was not to add more assertions around the same fake; it was to compare the fixture to the production encoder, restate the deletion precondition in domain terms (“readable by this app version”), and make the production codec the one authority.
+
+### Two retention alternatives reviewed and rejected
+
+I left the `createdAt` age anchor unchanged. It is the session/photo-capture anchor promised by Settings, already has an inclusive-boundary test, and was the behavior observed in the 2026-08-16 manual pass. Using completion time would be more conservative for an unusually old draft, but it would redefine rather than repair the policy. The finalization dialog below adds a user confirmation before the transition, although its copy correctly describes bill immutability rather than claiming to explain this retention edge.
+
+I also left the missing/unknown-preference fallback at 30 days. Menuscript has no shipped installed base, so there is no current upgrade population to surprise, and 30 days is the actual default chosen in response to the peer review. This is not a permanent migration claim: before a release has existing users, a missing-preference migration or keep-forever compatibility fallback must be considered explicitly. Documenting that boundary was more truthful than building first-run migration machinery for users who do not yet exist.
+
+### Accepted completion hardening (C1–C3)
+
+1. **C1 — reject late completed-session FX writes.** `SessionStore.updateFXRate` now throws payload-free `SessionStoreError.completedSessionCannotUpdateFXRate` before it reads or mutates the five FX fields. `BillView.refreshFXRate` rechecks completion after the awaited provider fetch and before writing, and separately catches that typed error without showing an alert; unrelated persistence errors still alert. The regression asserts the exact error, five unchanged fields, zero save calls, and no pending context changes.
+2. **C2 — confirm draft finalization.** Done on a draft presents a confirmation dialog; Cancel/outside dismissal leaves it editable, and Finish Bill calls the existing atomic finalization path. Completed-session Done behavior remains direct dismissal. A 2026-08-18 iPhone 16e / iOS 26.3 offline English simulator pass observed the dialog, changed people from 2 → 3 after cancellation, then confirmed and saw the session return to History as Completed.
+3. **C3 — preserve small-rate precision.** Rate display now uses an `en_US_POSIX` fixed-decimal formatter with up to eight fractional digits and trailing zeros trimmed. A positive rate below `0.00000001` shows `<0.00000001`; ordinary, small, threshold, below-threshold, and above-threshold cases are pinned by tests.
+
+### Scope deliberately held
+
+Six review ideas remain deferred and are not described elsewhere as delivered:
+
+| Item | Final disposition and reason |
+|---|---|
+| #4 three-tier FX cache redesign | Deferred: runtime semantics redesign with no demonstrated Sprint 5 blocker. |
+| #7 typed FX outcome migration | Deferred: broad provider/consumer/test migration with a large compile surface. |
+| #9 manual-override CRUD | Deferred: additional product surface; the current `UserDefaults` writer is non-throwing, so the alleged swallowed-write-error premise did not hold. |
+| #10 targeted deletion/context redesign | Deferred: primarily a performance optimization; the current full-fetch path retains correctness guards. |
+| #11 local save-day semantics | Deferred: edge-case display semantics that need a separately specified timezone contract. |
+| #15 shared FX provider | Deferred: architectural cleanup without a demonstrated behavioral defect. |
+
+The discipline here was to fix the irreversible data-safety invariant and three small correctness/UX issues, then freeze. Adding unrelated architecture breadth would not make the evidence stronger and would increase the surface that had to be reverified.
+
+### Final evidence and remaining limits
+
+The pre-safety checkpoint was 195 Swift Testing tests + 41 XCTest tests = 236. The frozen 2026-08-18 run reports **201 Swift Testing tests across 35 suites + 41 XCTest tests = 242 total, 0 failures**, ending with the exact result `** TEST SUCCEEDED **`. The six added tests are the four retention safety regressions, the completed-session FX rejection regression, and the small-rate presentation test.
+
+The manual retention evidence from 2026-08-16 remains valid only for the production-readable snapshot path it actually exercised; invalid-state protection is unit evidence. The C2 dialog branches have the focused simulator observation above. Still pending, and not converted into implied passes by this review: physical-device smoke, airplane-mode device validation, the formal live-Gemini-key/disclosure path, the pruned-photo alert body on screen, and actual external-storage disk reclamation.
+
+This final pass follows the project's responsible-AI rule in substance: AI-generated implementation and tests were treated as proposals, an adversarial review found a false fixture premise, the implementation selected the smallest safety fix, unrelated scope was deferred with reasons, and final automated plus narrowly scoped manual evidence was required before the documentation was updated. These AI-drafted changes are committed on `sprint-5-professional-completion` as `61e915d` and `7bc7d87`, and still require the project owner's review and approval before the branch is merged into `main`.

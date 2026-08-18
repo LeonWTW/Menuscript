@@ -1,22 +1,6 @@
 {
   "sourceLanguage" : "zh-Hant",
   "strings" : {
-    "、" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : ", "
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "、"
-          }
-        }
-      }
-    },
     "，%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -35,6 +19,7 @@
       }
     },
     "，可能含有 %@，請與餐廳確認" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -101,6 +86,40 @@
         }
       }
     },
+    "、" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", "
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "、"
+          }
+        }
+      }
+    },
+    "。請刪除失敗嘅相，再重新揀選或拍攝。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ". Delete the failed photos, then select or take them again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "。請刪除失敗嘅相，再重新揀選或拍攝。"
+          }
+        }
+      }
+    },
     "＊ 未有標價嘅品項未計入總數" : {
       "localizations" : {
         "en" : {
@@ -113,6 +132,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "＊ 未有標價嘅品項未計入總數"
+          }
+        }
+      }
+    },
+    "%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
           }
         }
       }
@@ -134,6 +169,22 @@
         }
       }
     },
+    "%@ ×%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ×%2$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ×%2$@"
+          }
+        }
+      }
+    },
     "%@ ×%lld" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -147,6 +198,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ ×%lld"
+          }
+        }
+      }
+    },
+    "%@ 人" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ people"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 人"
+          }
+        }
+      }
+    },
+    "%@ 味菜 · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ dishes · %2$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 味菜 · %2$@"
+          }
+        }
+      }
+    },
+    "%@ 張相載入失敗；請刪除失敗嘅相，再重新揀選或拍攝。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ photos failed to load. Delete the failed photos, then select or take them again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 張相載入失敗；請刪除失敗嘅相，再重新揀選或拍攝。"
           }
         }
       }
@@ -253,7 +352,74 @@
         }
       }
     },
+    "%@（示範匯率，%@）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (demo rate, %@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（示範匯率，%@）"
+          }
+        }
+      }
+    },
+    "%@（示範匯率）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (demo rate)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（示範匯率）"
+          }
+        }
+      }
+    },
+    "%@/%@ 張相" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos: %1$@/%2$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@/%2$@ 張相"
+          }
+        }
+      }
+    },
+    "%@%%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%%"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%%"
+          }
+        }
+      }
+    },
     "%lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -357,6 +523,7 @@
       }
     },
     "%lld 張相載入失敗；請刪除失敗嘅相，再重新揀選或拍攝。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -401,23 +568,8 @@
         }
       }
     },
-    "%lld%%" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld%%"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld%%"
-          }
-        }
-      }
-    },
     "%lld/%lld 張相" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -429,6 +581,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld/%2$lld 張相"
+          }
+        }
+      }
+    },
+    "%lld%%" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
           }
         }
       }
@@ -445,6 +614,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "≈ %@"
+          }
+        }
+      }
+    },
+    "30 日" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 days"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 日"
+          }
+        }
+      }
+    },
+    "90 日" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90 days"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90 日"
           }
         }
       }
@@ -466,6 +667,7 @@
       }
     },
     "AI 推測僅供參考，落單前請務必同餐廳確認。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -530,6 +732,142 @@
         }
       }
     },
+    "Gemini API Key 無效或已失效，請去設定更新。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Gemini API key is invalid or expired. Update it in Settings."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini API Key 無效或已失效，請去設定更新。"
+          }
+        }
+      }
+    },
+    "Gemini API 用量已達上限，請等限額重置或檢查專案配額。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Gemini API quota has been reached. Wait for it to reset or check the project quota."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini API 用量已達上限，請等限額重置或檢查專案配額。"
+          }
+        }
+      }
+    },
+    "Gemini 專案嘅計費設定未啟用或有問題，請檢查 Google AI 專案。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Gemini project's billing setup isn't enabled or has a problem. Check the Google AI project."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 專案嘅計費設定未啟用或有問題，請檢查 Google AI 專案。"
+          }
+        }
+      }
+    },
+    "Gemini 專案無權使用呢個功能，請檢查 API Key 所屬專案權限。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Gemini project doesn't have access to this feature. Check the project permissions for the API key."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 專案無權使用呢個功能，請檢查 API Key 所屬專案權限。"
+          }
+        }
+      }
+    },
+    "Gemini 拒絕咗呢次請求，請檢查 model 設定或重新選擇相片。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini rejected this request. Check the model setting or choose the photos again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 拒絕咗呢次請求，請檢查 model 設定或重新選擇相片。"
+          }
+        }
+      }
+    },
+    "Gemini 服務暫時不可用，請稍後再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini is temporarily unavailable. Try again later."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 服務暫時不可用，請稍後再試。"
+          }
+        }
+      }
+    },
+    "Keychain 內嘅 API Key 資料已損壞。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The API key data in Keychain is corrupted."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain 內嘅 API Key 資料已損壞。"
+          }
+        }
+      }
+    },
+    "Keychain 回傳咗無效資料。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain returned invalid data."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain 回傳咗無效資料。"
+          }
+        }
+      }
+    },
     "Keychain 操作失敗（%@）：%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -560,6 +898,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keychain 操作失敗（錯誤代碼 %@）"
+          }
+        }
+      }
+    },
+    "Keychain 暫時無法使用，請稍後再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain is temporarily unavailable. Try again later."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain 暫時無法使用，請稍後再試。"
           }
         }
       }
@@ -596,6 +951,23 @@
         }
       }
     },
+    "仲有 %lld 張相載入緊，等全部完成先可以辨識。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos still loading: %lld. Wait for all of them to finish before recognition."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仲有 %lld 張相載入緊，等全部完成先可以辨識。"
+          }
+        }
+      }
+    },
     "伺服器回應錯誤（HTTP %lld），請遲啲再試。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -609,6 +981,55 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "伺服器回應錯誤（HTTP %lld），請遲啲再試。"
+          }
+        }
+      }
+    },
+    "使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Before using Live Recognition, please confirm: your Gemini API key, menu photos, target language, allergen settings, and the names of dishes you later ask to explain will be sent directly from this device to Google Gemini. Data retention depends on whether you use a free or paid Google plan."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。"
+          }
+        }
+      }
+    },
+    "保留期限" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep photos for"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留期限"
+          }
+        }
+      }
+    },
+    "傳送資料到 Google Gemini" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send Data to Google Gemini"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送資料到 Google Gemini"
           }
         }
       }
@@ -664,6 +1085,40 @@
         }
       }
     },
+    "最多只可以加入 %lld 張相；今次有 %lld 張未加入。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo limit: %lld; not added this time: %lld."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多只可以加入 %lld 張相；今次有 %lld 張未加入。"
+          }
+        }
+      }
+    },
+    "最新匯率未能儲存，請稍後再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The latest exchange rate could not be saved. Try again later."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新匯率未能儲存，請稍後再試。"
+          }
+        }
+      }
+    },
     "刪除呢張相" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -714,6 +1169,22 @@
         }
       }
     },
+    "原始菜單相片已按「保留期限」設定自動清理，帳單同菜式紀錄冇受影響。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The original menu photos were cleared automatically by your retention setting. The bill and dish records were not affected."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始菜單相片已按「保留期限」設定自動清理，帳單同菜式紀錄冇受影響。"
+          }
+        }
+      }
+    },
     "去 Settings" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -760,6 +1231,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可能含有敏感原"
+          }
+        }
+      }
+    },
+    "同意並繼續" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agree and Continue"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同意並繼續"
           }
         }
       }
@@ -831,6 +1319,7 @@
       }
     },
     "埋單" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -881,6 +1370,7 @@
       }
     },
     "大豆" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -897,6 +1387,7 @@
       }
     },
     "奶" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -929,6 +1420,23 @@
         }
       }
     },
+    "安全儲存空間暫時無法使用，請稍後再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secure storage is temporarily unavailable. Try again later."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全儲存空間暫時無法使用，請稍後再試。"
+          }
+        }
+      }
+    },
     "完成" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -942,6 +1450,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "完成"
+          }
+        }
+      }
+    },
+    "完成帳單" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish Bill"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成帳單"
+          }
+        }
+      }
+    },
+    "完成後將無法再修改帳單內容。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You won't be able to edit the bill after finishing it."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成後將無法再修改帳單內容。"
           }
         }
       }
@@ -964,6 +1504,7 @@
       }
     },
     "小麥" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -975,6 +1516,89 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "小麥"
+          }
+        }
+      }
+    },
+    "已完成" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
+        }
+      }
+    },
+    "已完成帳單缺少可讀取嘅快照，記錄未有再被修改。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The completed bill is missing a readable snapshot. The record was not changed."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成帳單缺少可讀取嘅快照，記錄未有再被修改。"
+          }
+        }
+      }
+    },
+    "已完成帳單唔可以更新匯率，記錄未有被修改。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The exchange rate cannot be updated for a completed bill. The record was not changed."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成帳單唔可以更新匯率，記錄未有被修改。"
+          }
+        }
+      }
+    },
+    "已完成帳單資料已損壞，因此未有顯示任何帳單內容。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The completed bill data is unreadable, so no bill details are shown."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成帳單資料已損壞，因此未有顯示任何帳單內容。"
+          }
+        }
+      }
+    },
+    "已完成菜單嘅原始相片會喺選定期限後自動清理，帳單同菜式紀錄會完整保留；未完成嘅菜單唔會被清理。已清理嘅相片無法還原，加長期限都唔會令佢哋返返嚟。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original photos of completed menus are cleared automatically after the selected period. The bill and dish records are kept in full, and unfinished menus are never pruned. Cleared photos cannot be recovered — extending the period will not bring them back."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成菜單嘅原始相片會喺選定期限後自動清理，帳單同菜式紀錄會完整保留；未完成嘅菜單唔會被清理。已清理嘅相片無法還原，加長期限都唔會令佢哋返返嚟。"
           }
         }
       }
@@ -1013,6 +1637,23 @@
         }
       }
     },
+    "已選嘅 Gemini model 不存在或者專案無權使用，請檢查 model 設定。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected Gemini model doesn't exist or the project can't access it. Check the model setting."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已選嘅 Gemini model 不存在或者專案無權使用，請檢查 model 設定。"
+          }
+        }
+      }
+    },
     "帳單" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1026,6 +1667,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帳單"
+          }
+        }
+      }
+    },
+    "帳單未能安全顯示" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bill unavailable"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帳單未能安全顯示"
+          }
+        }
+      }
+    },
+    "帳單記錄版本（%lld）未能讀取。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bill record version %lld cannot be read."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帳單記錄版本（%lld）未能讀取。"
           }
         }
       }
@@ -1165,6 +1840,7 @@
       }
     },
     "搵菜式相片" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1263,6 +1939,23 @@
         }
       }
     },
+    "暫時攞唔到最新匯率，請檢查網絡或稍後再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to get the latest exchange rate. Check the network or try again later."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
+          }
+        }
+      }
+    },
     "更新匯率" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1280,6 +1973,23 @@
         }
       }
     },
+    "更新匯率失敗" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to Update Exchange Rate"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新匯率失敗"
+          }
+        }
+      }
+    },
     "未命名菜單" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1293,6 +2003,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未命名菜單"
+          }
+        }
+      }
+    },
+    "未完成" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfinished"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未完成"
+          }
+        }
+      }
+    },
+    "未有加入已完成訂單" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not included in the completed order"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未有加入已完成訂單"
           }
         }
       }
@@ -1327,6 +2070,106 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未有菜單記錄"
+          }
+        }
+      }
+    },
+    "未能儲存帳單，請再試一次。（%@）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The bill couldn't be saved. Try again. (%@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能儲存帳單，請再試一次。（%@）"
+          }
+        }
+      }
+    },
+    "未能儲存菜單，請再試一次。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the menu. Try again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能儲存菜單，請再試一次。"
+          }
+        }
+      }
+    },
+    "未能刪除菜單記錄，原有記錄已保留。（%@）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu records couldn't be deleted. Existing records were kept. (%@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能刪除菜單記錄，原有記錄已保留。（%@）"
+          }
+        }
+      }
+    },
+    "未能清理菜單相片，原有相片已保留。（%@）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu photos couldn't be cleared. Existing photos were kept. (%@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能清理菜單相片，原有相片已保留。（%@）"
+          }
+        }
+      }
+    },
+    "未能讀取菜單記錄，今次未有清理任何相片。（%@）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu records couldn't be read, so no photos were cleared this time. (%@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能讀取菜單記錄，今次未有清理任何相片。（%@）"
+          }
+        }
+      }
+    },
+    "未能讀取菜單記錄，請再試一次。（%@）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu records couldn't be loaded. Try again. (%@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能讀取菜單記錄，請再試一次。（%@）"
           }
         }
       }
@@ -1366,6 +2209,7 @@
       }
     },
     "樹果仁" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1377,6 +2221,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "樹果仁"
+          }
+        }
+      }
+    },
+    "檢查 Model 設定" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Model Settings"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檢查 Model 設定"
+          }
+        }
+      }
+    },
+    "檢查專案權限" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Project Permissions"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檢查專案權限"
+          }
+        }
+      }
+    },
+    "檢查計費設定" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Billing Settings"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檢查計費設定"
+          }
+        }
+      }
+    },
+    "正在載入第 %lld 頁菜單相片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading menu photo page %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入第 %lld 頁菜單相片"
           }
         }
       }
@@ -1443,6 +2355,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每人銀碼向上取整，總收可能多出少許"
+          }
+        }
+      }
+    },
+    "永久保留" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep forever"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "永久保留"
           }
         }
       }
@@ -1615,6 +2543,7 @@
       }
     },
     "甲殼類海鮮" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1680,6 +2609,57 @@
         }
       }
     },
+    "相片無法顯示" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo Unavailable"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相片無法顯示"
+          }
+        }
+      }
+    },
+    "相片資料太大，請減少相片或重新影過。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The photo data is too large. Use fewer photos or photograph the menu again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相片資料太大，請減少相片或重新影過。"
+          }
+        }
+      }
+    },
+    "相片資料太大（上限 %.0f MB）。請刪除部分相片再試。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo data is too large (maximum %.0f MB). Remove some photos and try again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相片資料太大（上限 %.0f MB）。請刪除部分相片再試。"
+          }
+        }
+      }
+    },
     "相簿" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1698,6 +2678,7 @@
       }
     },
     "確定" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1709,6 +2690,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "確定"
+          }
+        }
+      }
+    },
+    "確定要完成帳單？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish this bill?"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確定要完成帳單？"
           }
         }
       }
@@ -1747,6 +2744,23 @@
         }
       }
     },
+    "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demo Mode doesn't support this currency pair yet. Choose another currency in Settings."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
+          }
+        }
+      }
+    },
     "示範相" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1760,6 +2774,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "示範相"
+          }
+        }
+      }
+    },
+    "第 %@ 頁嘅相片資料已損壞" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The photo data for page %@ is corrupted."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %@ 頁嘅相片資料已損壞"
+          }
+        }
+      }
+    },
+    "第 %lld 頁，共 %lld 頁" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %lld of %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 頁，共 %lld 頁"
+          }
+        }
+      }
+    },
+    "第 %lld 頁嘅相片資料已損壞" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The photo data for page %lld is corrupted."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 頁嘅相片資料已損壞"
           }
         }
       }
@@ -1865,6 +2929,22 @@
         }
       }
     },
+    "自訂 %@%%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom %@%%"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自訂 %@%%"
+          }
+        }
+      }
+    },
     "自訂 %lld%%" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1883,6 +2963,7 @@
       }
     },
     "自訂敏感原（逗號分隔）" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1933,6 +3014,7 @@
       }
     },
     "芝麻" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1949,6 +3031,7 @@
       }
     },
     "花生" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1977,6 +3060,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "菜單"
+          }
+        }
+      }
+    },
+    "菜單相片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu Photos"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜單相片"
+          }
+        }
+      }
+    },
+    "菜單相片保留" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu Photo Retention"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜單相片保留"
+          }
+        }
+      }
+    },
+    "菜單相片已自動清理" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu Photos Cleared Automatically"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜單相片已自動清理"
+          }
+        }
+      }
+    },
+    "菜單相片，第 %lld 頁，共 %lld 頁" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu photo, page %lld of %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜單相片，第 %lld 頁，共 %lld 頁"
           }
         }
       }
@@ -2031,7 +3180,25 @@
         }
       }
     },
+    "菜式解釋暫時失敗，請再試一次。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The dish explanation temporarily failed. Try again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜式解釋暫時失敗，請再試一次。"
+          }
+        }
+      }
+    },
     "蛋" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2043,22 +3210,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "蛋"
-          }
-        }
-      }
-    },
-    "軟體動物" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Molluscs"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "軟體動物"
           }
         }
       }
@@ -2113,6 +3264,23 @@
         }
       }
     },
+    "請先揀至少一款菜式先完成帳單。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one dish before completing the bill."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請先揀至少一款菜式先完成帳單。"
+          }
+        }
+      }
+    },
     "請求太密，已達到 API 用量上限，請等一陣再試。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2162,7 +3330,58 @@
         }
       }
     },
+    "軟體動物" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Molluscs"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軟體動物"
+          }
+        }
+      }
+    },
+    "載入失敗" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load Failed"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "載入失敗"
+          }
+        }
+      }
+    },
+    "載入緊相片…（%@/%@）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading photos… (%1$@/%2$@)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "載入緊相片…（%1$@/%2$@）"
+          }
+        }
+      }
+    },
     "載入緊相片…（%lld/%lld）" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2212,6 +3431,23 @@
         }
       }
     },
+    "辨識暫時失敗，請再試一次。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recognition temporarily failed. Try again."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辨識暫時失敗，請再試一次。"
+          }
+        }
+      }
+    },
     "辨識緊菜單…" : {
       "localizations" : {
         "en" : {
@@ -2224,6 +3460,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "辨識緊菜單…"
+          }
+        }
+      }
+    },
+    "部分菜單記錄未完成儲存，今次未有刪除任何記錄。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some menu records have not finished saving. No records were deleted."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分菜單記錄未完成儲存，今次未有刪除任何記錄。"
           }
         }
       }
@@ -2310,6 +3563,56 @@
         }
       }
     },
+    "附加費／稅 %@%%" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Surcharge / Tax %@%%"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附加費／稅 %@%%"
+          }
+        }
+      }
+    },
+    "離線示範模式暫時唔支援「%@」，請選擇繁體中文或 English。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline Demo Mode doesn't support \"%@\". Choose Traditional Chinese or English."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離線示範模式暫時唔支援「%@」，請選擇繁體中文或 English。"
+          }
+        }
+      }
+    },
+    "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Gemini API key (BYOK) is required for live features. The API key is stored in the device Keychain. For live recognition or dish explanations, the app sends the key and related request directly to Google Gemini, without passing through our servers."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。"
+          }
+        }
+      }
+    },
     "非 HTTP 回應" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2360,6 +3663,7 @@
       }
     },
     "魚" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2375,855 +3679,8 @@
         }
       }
     },
-    "最多只可以加入 %lld 張相；今次有 %lld 張未加入。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Photo limit: %lld; not added this time: %lld."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最多只可以加入 %lld 張相；今次有 %lld 張未加入。"
-          }
-        }
-      }
-    },
-    "仲有 %lld 張相載入緊，等全部完成先可以辨識。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Photos still loading: %lld. Wait for all of them to finish before recognition."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仲有 %lld 張相載入緊，等全部完成先可以辨識。"
-          }
-        }
-      }
-    },
-    "。請刪除失敗嘅相，再重新揀選或拍攝。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : ". Delete the failed photos, then select or take them again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "。請刪除失敗嘅相，再重新揀選或拍攝。"
-          }
-        }
-      }
-    },
-    "相片資料太大（上限 %.0f MB）。請刪除部分相片再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Photo data is too large (maximum %.0f MB). Remove some photos and try again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相片資料太大（上限 %.0f MB）。請刪除部分相片再試。"
-          }
-        }
-      }
-    },
-    "未完成" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unfinished"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未完成"
-          }
-        }
-      }
-    },
-    "已完成" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Completed"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已完成"
-          }
-        }
-      }
-    },
-    "菜單相片" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu Photos"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜單相片"
-          }
-        }
-      }
-    },
-    "相片無法顯示" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Photo Unavailable"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相片無法顯示"
-          }
-        }
-      }
-    },
-    "第 %lld 頁，共 %lld 頁" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Page %lld of %lld"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "第 %lld 頁，共 %lld 頁"
-          }
-        }
-      }
-    },
-    "菜單相片，第 %lld 頁，共 %lld 頁" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu photo, page %lld of %lld"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜單相片，第 %lld 頁，共 %lld 頁"
-          }
-        }
-      }
-    },
-    "第 %lld 頁嘅相片資料已損壞" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The photo data for page %lld is corrupted."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "第 %lld 頁嘅相片資料已損壞"
-          }
-        }
-      }
-    },
-    "正在載入第 %lld 頁菜單相片" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading menu photo page %lld"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在載入第 %lld 頁菜單相片"
-          }
-        }
-      }
-    },
-    "附加費／稅 %@%%" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Surcharge / Tax %@%%"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "附加費／稅 %@%%"
-          }
-        }
-      }
-    },
-    "請先揀至少一款菜式先完成帳單。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select at least one dish before completing the bill."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請先揀至少一款菜式先完成帳單。"
-          }
-        }
-      }
-    },
-    "帳單記錄版本（%lld）未能讀取。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bill record version %lld cannot be read."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帳單記錄版本（%lld）未能讀取。"
-          }
-        }
-      }
-    },
-    "已完成帳單缺少可讀取嘅快照，記錄未有再被修改。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The completed bill is missing a readable snapshot. The record was not changed."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已完成帳單缺少可讀取嘅快照，記錄未有再被修改。"
-          }
-        }
-      }
-    },
-    "部分菜單記錄未完成儲存，今次未有刪除任何記錄。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Some menu records have not finished saving. No records were deleted."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "部分菜單記錄未完成儲存，今次未有刪除任何記錄。"
-          }
-        }
-      }
-    },
-    "未能儲存帳單，請再試一次。（%@）" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The bill couldn't be saved. Try again. (%@)"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未能儲存帳單，請再試一次。（%@）"
-          }
-        }
-      }
-    },
-    "未能讀取菜單記錄，請再試一次。（%@）" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu records couldn't be loaded. Try again. (%@)"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未能讀取菜單記錄，請再試一次。（%@）"
-          }
-        }
-      }
-    },
-    "未能刪除菜單記錄，原有記錄已保留。（%@）" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu records couldn't be deleted. Existing records were kept. (%@)"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未能刪除菜單記錄，原有記錄已保留。（%@）"
-          }
-        }
-      }
-    },
-    "Keychain 回傳咗無效資料。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keychain returned invalid data."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keychain 回傳咗無效資料。"
-          }
-        }
-      }
-    },
-    "Keychain 內嘅 API Key 資料已損壞。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The API key data in Keychain is corrupted."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keychain 內嘅 API Key 資料已損壞。"
-          }
-        }
-      }
-    },
-    "Gemini API Key 無效或已失效，請去設定更新。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The Gemini API key is invalid or expired. Update it in Settings."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini API Key 無效或已失效，請去設定更新。"
-          }
-        }
-      }
-    },
-    "離線示範模式暫時唔支援「%@」，請選擇繁體中文或 English。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Offline Demo Mode doesn't support \"%@\". Choose Traditional Chinese or English."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "離線示範模式暫時唔支援「%@」，請選擇繁體中文或 English。"
-          }
-        }
-      }
-    },
-    "Gemini 專案無權使用呢個功能，請檢查 API Key 所屬專案權限。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The Gemini project doesn't have access to this feature. Check the project permissions for the API key."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini 專案無權使用呢個功能，請檢查 API Key 所屬專案權限。"
-          }
-        }
-      }
-    },
-    "Gemini 專案嘅計費設定未啟用或有問題，請檢查 Google AI 專案。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The Gemini project's billing setup isn't enabled or has a problem. Check the Google AI project."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini 專案嘅計費設定未啟用或有問題，請檢查 Google AI 專案。"
-          }
-        }
-      }
-    },
-    "Gemini API 用量已達上限，請等限額重置或檢查專案配額。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The Gemini API quota has been reached. Wait for it to reset or check the project quota."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini API 用量已達上限，請等限額重置或檢查專案配額。"
-          }
-        }
-      }
-    },
-    "已選嘅 Gemini model 不存在或者專案無權使用，請檢查 model 設定。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The selected Gemini model doesn't exist or the project can't access it. Check the model setting."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已選嘅 Gemini model 不存在或者專案無權使用，請檢查 model 設定。"
-          }
-        }
-      }
-    },
-    "Gemini 拒絕咗呢次請求，請檢查 model 設定或重新選擇相片。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini rejected this request. Check the model setting or choose the photos again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini 拒絕咗呢次請求，請檢查 model 設定或重新選擇相片。"
-          }
-        }
-      }
-    },
-    "Gemini 服務暫時不可用，請稍後再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini is temporarily unavailable. Try again later."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini 服務暫時不可用，請稍後再試。"
-          }
-        }
-      }
-    },
-    "相片資料太大，請減少相片或重新影過。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The photo data is too large. Use fewer photos or photograph the menu again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相片資料太大，請減少相片或重新影過。"
-          }
-        }
-      }
-    },
-    "傳送資料到 Google Gemini" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send Data to Google Gemini"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "傳送資料到 Google Gemini"
-          }
-        }
-      }
-    },
-    "使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Before using Live Recognition, please confirm: your Gemini API key, menu photos, target language, allergen settings, and the names of dishes you later ask to explain will be sent directly from this device to Google Gemini. Data retention depends on whether you use a free or paid Google plan."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用真實辨識前，請確認：你嘅 Gemini API Key、菜單相片、目標語言、敏感原設定，以及之後要求解釋嘅菜式名稱，會由裝置直接傳送到 Google Gemini。資料保留方式視乎你使用嘅 Google 免費或付費方案。"
-          }
-        }
-      }
-    },
-    "同意並繼續" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agree and Continue"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同意並繼續"
-          }
-        }
-      }
-    },
-    "檢查專案權限" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check Project Permissions"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "檢查專案權限"
-          }
-        }
-      }
-    },
-    "檢查計費設定" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check Billing Settings"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "檢查計費設定"
-          }
-        }
-      }
-    },
-    "檢查 Model 設定" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check Model Settings"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "檢查 Model 設定"
-          }
-        }
-      }
-    },
-    "辨識暫時失敗，請再試一次。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recognition temporarily failed. Try again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "辨識暫時失敗，請再試一次。"
-          }
-        }
-      }
-    },
-    "安全儲存空間暫時無法使用，請稍後再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Secure storage is temporarily unavailable. Try again later."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安全儲存空間暫時無法使用，請稍後再試。"
-          }
-        }
-      }
-    },
-    "Keychain 暫時無法使用，請稍後再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keychain is temporarily unavailable. Try again later."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keychain 暫時無法使用，請稍後再試。"
-          }
-        }
-      }
-    },
-    "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A Gemini API key (BYOK) is required for live features. The API key is stored in the device Keychain. For live recognition or dish explanations, the app sends the key and related request directly to Google Gemini, without passing through our servers."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。"
-          }
-        }
-      }
-    },
-    "菜式解釋暫時失敗，請再試一次。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The dish explanation temporarily failed. Try again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜式解釋暫時失敗，請再試一次。"
-          }
-        }
-      }
-    },
-    "更新匯率失敗" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed to Update Exchange Rate"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新匯率失敗"
-          }
-        }
-      }
-    },
-    "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Demo Mode doesn't support this currency pair yet. Choose another currency in Settings."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示範模式暫時唔支援呢個貨幣組合，請喺設定揀另一隻貨幣。"
-          }
-        }
-      }
-    },
-    "暫時攞唔到最新匯率，請檢查網絡或稍後再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to get the latest exchange rate. Check the network or try again later."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暫時攞唔到最新匯率，請檢查網絡或稍後再試。"
-          }
-        }
-      }
-    },
-    "最新匯率未能儲存，請稍後再試。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The latest exchange rate could not be saved. Try again later."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最新匯率未能儲存，請稍後再試。"
-          }
-        }
-      }
-    },
-    "%@（示範匯率，%@）" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ (demo rate, %@)"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@（示範匯率，%@）"
-          }
-        }
-      }
-    },
-    "%@（示範匯率）" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ (demo rate)"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@（示範匯率）"
-          }
-        }
-      }
-    },
-    "載入失敗" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Load Failed"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "載入失敗"
-          }
-        }
-      }
-    },
-    "未能儲存菜單，請再試一次。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't save the menu. Try again."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未能儲存菜單，請再試一次。"
-          }
-        }
-      }
-    },
-    "帳單未能安全顯示" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bill unavailable"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帳單未能安全顯示"
-          }
-        }
-      }
-    },
-    "已完成帳單資料已損壞，因此未有顯示任何帳單內容。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The completed bill data is unreadable, so no bill details are shown."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已完成帳單資料已損壞，因此未有顯示任何帳單內容。"
-          }
-        }
-      }
-    },
-    "未有加入已完成訂單" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not included in the completed order"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未有加入已完成訂單"
-          }
-        }
-      }
-    },
     "麩質" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

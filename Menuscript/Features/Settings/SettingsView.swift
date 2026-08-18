@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw: String = "system"
     @AppStorage(SettingsKeys.allergenPresets) private var allergenPresets: String = ""
     @AppStorage(SettingsKeys.allergenCustom) private var allergenCustom: String = ""
+    @AppStorage(SettingsKeys.photoRetention) private var photoRetentionRaw: String = PhotoRetentionPolicy.days30.rawValue
 
     @State private var apiKeyState: APIKeySettingsModel
 
@@ -162,6 +163,18 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("保留期限", selection: $photoRetentionRaw) {
+                    ForEach(PhotoRetentionPolicy.allCases) { policy in
+                        retentionLabel(for: policy).tag(policy.rawValue)
+                    }
+                }
+            } header: {
+                Text("菜單相片保留")
+            } footer: {
+                Text("已完成菜單嘅原始相片會喺選定期限後自動清理，帳單同菜式紀錄會完整保留；未完成嘅菜單唔會被清理。已清理嘅相片無法還原，加長期限都唔會令佢哋返返嚟。")
+            }
+
+            Section {
                 Button("清除全部菜單記錄", role: .destructive) {
                     showDeleteAllConfirm = true
                 }
@@ -207,6 +220,19 @@ struct SettingsView: View {
             Text(verbatim: "繁體中文")
         case .english:
             Text(verbatim: "English")
+        }
+    }
+
+    /// Maps each stored retention choice to its human-readable picker label.
+    @ViewBuilder
+    private func retentionLabel(for policy: PhotoRetentionPolicy) -> some View {
+        switch policy {
+        case .days30:
+            Text("30 日")
+        case .days90:
+            Text("90 日")
+        case .forever:
+            Text("永久保留")
         }
     }
 

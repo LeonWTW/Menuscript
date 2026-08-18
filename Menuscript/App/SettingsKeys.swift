@@ -12,6 +12,7 @@ enum SettingsKeys {
     static let appLanguage = "settings.appLanguage"           // String: "system" | "zh-Hant" | "en", default "system"
     static let allergenPresets = "settings.allergenPresets"   // String, comma-joined Allergen slugs, default ""
     static let allergenCustom = "settings.allergenCustom"     // String, free-text custom allergens, default ""
+    static let photoRetention = "settings.photoRetention"     // String: "30d" | "90d" | "forever", default "30d", resolved by PhotoRetentionPolicy.resolve(from:)
 
     /// Provides the initial translation language only when the user has not saved
     /// a choice. An English app (or English device in system mode) starts with

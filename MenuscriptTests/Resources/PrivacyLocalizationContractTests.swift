@@ -84,16 +84,9 @@ struct PrivacyLocalizationContractTests {
         "需要自備 Gemini API Key（BYOK）先可以使用真實功能。API Key 會儲存喺裝置 Keychain；使用真實辨識或菜式解釋時，App 會將 Key 同相關請求直接傳送到 Google Gemini，唔會經我哋嘅伺服器。",
     ]
 
-    /// Locates the repository relative to this test file so catalog checks work from any launch directory.
-    private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-    }
-
     /// Loads one production string catalog as a dictionary for exact contract assertions.
     private func catalog(named name: String) throws -> [String: Any] {
-        let url = Self.repoRoot
+        let url = RepoPaths.root
             .appendingPathComponent("Menuscript/Resources")
             .appendingPathComponent(name)
         let data = try Data(contentsOf: url)
@@ -134,7 +127,7 @@ struct PrivacyLocalizationContractTests {
     func literalL10nKeysExist() throws {
         let root = try catalog(named: "Localizable.xcstrings")
         let strings = try #require(root["strings"] as? [String: Any])
-        let sourceRoot = Self.repoRoot.appendingPathComponent("Menuscript")
+        let sourceRoot = RepoPaths.root.appendingPathComponent("Menuscript")
         let enumerator = try #require(
             FileManager.default.enumerator(
                 at: sourceRoot,
@@ -199,7 +192,7 @@ struct PrivacyLocalizationContractTests {
         }
 
         let project = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent("project.yml"),
+            contentsOf: RepoPaths.root.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
         #expect(project.contains(expected["NSCameraUsageDescription"]?["zh-Hant"] ?? "missing"))

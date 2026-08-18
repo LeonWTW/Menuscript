@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  This privacy manifest tells Apple which user data and protected system APIs the app uses.
+  The declarations are explicit so App Store review can verify that menu photos, user-entered
+  content, allergen information, and UserDefaults access are used only for app functionality.
+-->
 <plist version="1.0">
 <dict>
     <key>NSPrivacyTracking</key>
