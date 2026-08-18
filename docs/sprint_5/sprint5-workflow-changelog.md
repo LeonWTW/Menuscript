@@ -1,6 +1,6 @@
 # Sprint 5 Workflow Changelog（2026-08-16 / 17）
 
-Peer Review Activity 2 嘅 multi-agent workflow 改動總結。全部改動喺 branch `sprint-5-professional-completion`（base `a41caf6`），**未 commit**。
+Peer Review Activity 2 嘅 multi-agent workflow 改動總結。改動以 `a41caf6` 為 base，已提交到 branch `sprint-5-professional-completion`；實作主 commit 係 `9c3057e`。
 
 ---
 
@@ -36,7 +36,8 @@ Peer Review Activity 2 嘅 multi-agent workflow 改動總結。全部改動喺 b
 | 檔案 | 內容 |
 |---|---|
 | `Menuscript/Services/PhotoRetentionPolicy.swift` | `enum PhotoRetentionPolicy: String`（`30d` / `90d` / `forever`）、`retentionWindow`（固定 86,400 秒一日）、`resolve(from:)` 讀 `UserDefaults` 並 fallback 30 日 |
-| `Menuscript/Services/PhotoRetentionService.swift` | `@MainActor struct`，`pruneExpiredPhotos(policy:now:) throws -> Int`；注入式 `SaveAction` / `FetchAllAction`；typed `PhotoRetentionError.fetchFailed` / `.saveFailed` |
+| `Menuscript/Services/PhotoRetentionService.swift` | `@MainActor struct`，`pruneExpiredPhotos(policy:now:) throws -> Int`；注入式 `SaveAction` / `FetchAllAction` |
+| `Menuscript/Services/PhotoRetentionError.swift` | typed `PhotoRetentionError.fetchFailed` / `.saveFailed` 同本地化失敗訊息；獨立成 focused type file |
 
 **Prune 嘅安全界線（設計核心）**
 
@@ -70,7 +71,7 @@ Peer Review Activity 2 嘅 multi-agent workflow 改動總結。全部改動喺 b
 
 **踩中並修好嘅陷阱**：4 個檔（`LocalizationTests`、`PrivacyLocalizationContractTests`、`PrivacyManifestTests`、`SessionStoreTests`）本身靠 `#filePath` 剝**剛好兩層**搵 repo root，搬深一層會靜靜咁指去 `MenuscriptTests/`。新增 `MenuscriptTests/Support/RepoPaths.swift`，改為向上行搵 `project.yml` marker，搵唔到就 `preconditionFailure` 大聲死。呢個改法對將來再搬檔免疫。
 
-**新測試**：`PhotoRetentionPolicyTests.swift`（5 `@Test`）、`PhotoRetentionServiceTests.swift`（11 `@Test`）＝ **16 條**。當中包含「prune 後用**全新** `ModelContext` 重新 fetch，assert `billSnapshotData` byte-identical、每個 line item 同 metadata 不變」——即係將安全論證測試化。
+**新測試**：`PhotoRetentionPolicyTests.swift`（5 `@Test`）、`PhotoRetentionServiceTests.swift`（11 `@Test`）＝ **16 條**。當中包含「prune 後用**全新** `ModelContext` 重新 fetch，assert `billSnapshotData` byte-identical、fixture item 同揀選咗嘅 session metadata 不變」——將安全論證測試化，但唔誇大成逐欄完整覆蓋。
 
 **數量**：220 → **236** 條 static 宣告（195 `@Test` + 41 XCTest `func test`）。搬檔前後靜態數同樣係 236，係「冇靜靜漏檔」嘅憑據。記錄嘅 run：`Test run with 195 tests in 35 suites passed`、`Executed 41 tests, with 0 failures`、`** TEST SUCCEEDED **`。
 
@@ -93,18 +94,20 @@ Peer Review Activity 2 嘅 multi-agent workflow 改動總結。全部改動喺 b
 3. 講錯畫面——「已清理」嘅區分係喺 `MenuView`（session detail），唔係 History 列表。
 4. XCUITest 入 CI 需要 signing 嘅講法錯——`CODE_SIGN_STYLE: Automatic`，simulator test 唔使 signing identity。
 
+Commit 後再審亦揪出三項文件問題：reflection 仲寫住「未 commit」、用兩張相推翻長期容量風險、同將部分 metadata assertions 寫成「全部欄位」。最終版已改用真實 branch 狀態、刪除無法支持嘅數量級結論，並將測試證據收窄到實際 assertions。
+
 ---
 
-## 8. 唔屬於今次 workflow 嘅 working-tree 改動
+## 8. 唔屬於今次 workflow 嘅既有改動
 
-以下係之前 doc-comment 那輪（`622049e`）嘅手尾，唔好當成 Sprint 5 產物：`Info.plist`、`Menuscript/Resources/PrivacyInfo.xcprivacy`、`project.yml`、`Menuscript/Resources/InfoPlist.xcstrings`（全部只加註解 header）。
+以下係之前 doc-comment 那輪（`622049e`）嘅手尾，雖然一併進入 `9c3057e`，但唔應當成 Sprint 5 workflow 產物：`Info.plist`、`Menuscript/Resources/PrivacyInfo.xcprivacy`、`project.yml` 加註解；`Menuscript/Resources/InfoPlist.xcstrings` 另外移除咗一個 `extractionState` 並改變 EOF newline。
 
 untracked 但同今次無關：`.agents/`、`.github/`、`cluade.md`、`concept-check-site/`、`docs/Prototype_Progress_todo.md`、`docs/canvas-submission-drafts.md`、`docs/commercial-roadmap.md`、`docs/sprint2_todo.md`、兩個 `docs/*.html`。
 
 ---
 
-## 9. 仲未收嘅尾
+## 9. 提交收尾狀態
 
-- **字數超標**：`peer-review-reflection.md` 現時 **1472 prose words（約 2.6 頁）**，brief 寫「approximately one to two pages」，複評 grader 亦點名要 ≤1,200。要落到兩頁就要剷「Why a window, not the alternatives」、pruning 驗證數據、或 XCUITest 成本估算其中兩項——三者分別撐住 rubric 第 2、3 格。
-- **18/20 係打喺 1743 字嗰版**；之後嘅壓縮同修正未經重評。
-- **全部未 commit**：14 個 modified、31 個 staged rename、5 個新 Swift/MD 檔。
+- `peer-review-reflection.md` 最終版係 **1006 prose words**：五條問題全部保留，但刪走重複 runner、CI 同無法支持嘅容量估算細節。
+- 舊有 **18/20** 評語針對較長、未 commit、證據過度聲稱嗰版，唔再代表最終交件。
+- 實作主 commit 係 `9c3057e`；為免重寫可能已分享嘅歷史，之後嘅 type organization 同文件修正以兩個 focused follow-up commits 收尾。
