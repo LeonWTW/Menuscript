@@ -212,3 +212,64 @@ I rejected a proposed F5 SwiftUI wiring test that tried to prove the dependency 
 I independently regenerated the ignored Xcode project with `xcodegen generate`, then ran the full suite on the iPhone 17 Pro simulator running iOS 26.3.1. The result was **Passed**: 220 total tests and 220 passed, with 245 device-dynamic runs; 0 failed, 0 skipped, and 0 expected failures. The two focused F2 direct-photo tests also passed under a 10-iteration repetition, and the focused FX suite passed 18/18 after its expected-rate table was expanded to assert all 15 added USD quotes exactly. Final `git diff --check` was clean.
 
 This is automated simulator evidence, not a substitute for hardware and network observation. The physical-device camera/UI, airplane-mode/no-key isolation, and live-key smoke cases for F1–F6 remain **Pending** and are enumerated exactly in `docs/manual-verification.md` (§ 2026-08-02). I have not represented them as passed.
+
+## 2026-08-16 — Sprint 5: Responding to the First External Peer Review
+
+Sprint 5 is the first round of work in this project driven by feedback from someone other than me. Exactly one peer review was received: `docs/peer-review-1.txt`, written on 2026-08-02 against `sprint-4-quality` at `41df014` / `d5794d6`. It was positive overall and carried five actionable items. My dispositions, each explained below:
+
+| The reviewer's item | Disposition |
+|---|---|
+| Implement a data retention / pruning strategy for stored photos — the review's own **highest priority** | **Implemented** |
+| Mirror the app's folder structure inside the flat `MenuscriptTests/` directory | **Implemented** |
+| Centralize the `xcodegen` / `xcodebuild` commands into the root README | **Declined**, on a premise I checked and found false |
+| Dynamic Type at AX3+ is unverified; add snapshot or UI tests | **Verification done by hand and documented; automation not added** |
+| Migrate the `osascript` / `cliclick` automation to a native XCUITest target | **Postponed again**, with the condition that flips it recorded |
+
+### AI implementation assistance and test generation
+
+I ran this sprint the way I ran Sprint 4: the acceptance contract was written before any implementation, and the implementation and its tests were produced by scoped Claude Code agents working against that contract, one concern per agent, each required to report a real command, its exit code, and its output. What I kept for myself was the scope — what the retention rule should protect, what the default should be, and what would count as evidence.
+
+The accepted work is deliberately narrow. Retention landed as two new files, `Menuscript/Services/PhotoRetentionPolicy.swift` (the storable `30d` / `90d` / `forever` choice and its window) and `Menuscript/Services/PhotoRetentionService.swift` (the throwing boundary that performs the prune), one new optional model field (`MenuSession.photosPrunedAt`), one Settings section, one `MenuView` notice button, and two call sites in `RootView`. The reorganization moved 31 test files with `git mv` into `App/`, `Features/`, `Models/`, `Resources/`, `Services/` and `Support/`.
+
+Numbers, re-measured on the working tree rather than quoted from the review: the suite now declares **236** tests — 195 Swift Testing `@Test` plus 41 XCTest `func test` — of which 16 are new this sprint (`PhotoRetentionPolicyTests` 5, `PhotoRetentionServiceTests` 11). Subtract those and the count is 179 + 41 = **220**, which is exactly the figure the reviewer reported, so their number was accurate for the code they read. The recorded run after the test files were moved is green: `Test run with 195 tests in 35 suites passed`, `Executed 41 tests, with 0 failures (0 unexpected)`, `** TEST SUCCEEDED **`.
+
+Two review-shaped decisions inside that work are worth recording, because in both cases the first idea was worse:
+
+1. **The prune had to be unable to damage a settled bill.** The service writes exactly two fields, `photos = []` and `photosPrunedAt`, inside a short-lived `ModelContext` with `autosaveEnabled = false`, so a failed save is discarded whole and the UI's autosaving context never commits a partial prune — the same discipline `SessionStore.persistDeletion` already used. The proof I asked for was not "the code looks right" but a test that re-fetches through a *fresh* context after pruning and asserts the bill snapshot is byte-identical and every dish unchanged.
+2. **Drafts are protected, and that is a product rule, not an optimization.** Eligibility requires `completed` *and* a stored bill snapshot; drafts, sessions saved before the lifecycle field existed, and completed sessions with no snapshot are all skipped, because for those the photos are the only surviving record of the meal.
+
+### One recommendation I declined on the evidence
+
+The review asked for the `xcodegen generate` and `xcodebuild test` commands to be centralized into the root README, on the basis that they were scattered through the verification documents. I checked the README **at the revision that was reviewed** before acting on it:
+
+```
+$ git show d5794d6:README.md | grep -nE 'Quickstart|xcodegen generate|xcodebuild test'
+46:## Quickstart
+53:xcodegen generate
+65:xcodebuild test -project Menuscript.xcodeproj -scheme Menuscript \
+```
+
+The Quickstart section, with both commands, already existed at the reviewed commit, so there was nothing to centralize and I made no change. I want to be fair about why the miss is understandable: those commands genuinely do also appear inside the verification logs, which is where a reviewer reading for engineering evidence spends their time, and an attentive reviewer failing to find the Quickstart is itself a small signal about discoverability. But accepting a recommendation without checking its premise would be the same failure mode as accepting AI output because it sounds right — which is the discipline the rest of this document is about.
+
+### One suggestion postponed again
+
+Migrating the host-driven automation into a committed XCUITest target stays postponed a second time. § 2026-07-26 records the first decision, which named it as Sprint 4 work; Sprint 4 did not take it up, and `project.yml` still declares no UI-test target.
+
+I want to concede the reviewer's premise fully, because this sprint produced two more pieces of evidence for it, not against it. The Dynamic Type pass had a drag focus a text field and then type `ggg` into it through the software keyboard, forcing a reinstall and a re-run (`docs/manual-verification.md`, § 2026-08-16 Dynamic Type, harness limitation 1). The retention pass could not get a tap to register anywhere in the top toolbar row — not on the new pruned-photos notice, and not on the pre-existing photo-gallery and Back buttons either — so the notice alert's text is recorded as *not observed* rather than passed (§ 2026-08-16 Photo Retention, harness limitation 1). The channel is exactly as fragile as the review says.
+
+The reason to postpone anyway is coverage, not disagreement. What actually carried this sprint's evidence was the part XCUITest cannot see: the contents of the SwiftData store read with `sqlite3`, a row aged 31 days by editing that store with the simulator shut down, the *absence* of any network request, and the byte-for-byte equality of a bill snapshot before and after a destructive operation. Rebuilding this as an in-process UI test would trade a completed, honestly-disclosed pass for a partial automated one that proves less. The condition that flips the decision is recorded plainly, and it is the reviewer's own argument: a CI pipeline, or a second contributor who cannot be asked to reproduce a manual pass. Either one makes automated coverage worth more than the depth it costs, and § 5 of `docs/sprint_5/peer-review-reflection.md` names it as the next engineering priority.
+
+### An engineering decision that was mine
+
+**Closing the Dynamic Type finding by verification rather than by adding a dependency.** The review asked for snapshot tests or formal UI testing at AX sizes. The app has zero third-party runtime dependencies, and a snapshot-testing library is a real, permanent addition to a project that has so far needed none. More to the point, the finding — first raised by my own AI review in Sprint 2 (§ *AI Engineering Review*, issue 3) and repeated by this reviewer — was that the accessibility behaviour was **unverified**, not that the code was missing: the `isAccessibilitySize` branches have existed since the original prototype. So I spent the effort on evidence instead: a documented simulator pass at AX3 and AX5 across five screens, with fixed pass/fail criteria written before the pass and every verdict traced to a screenshot that was opened and read. It confirmed the specific claim the review said was unevidenced — the three branch-carrying screens do take their accessibility branches — and it found four real layout issues, one of them a clipping verdict, that no green test suite had reported. That is not a permanent substitute for automation, and the section says so; it is the cheaper half done first.
+
+The other judgment that was mine is the **shape** of the retention feature: prune photos rather than sessions, keep the immutable snapshot untouched, default to 30 days but let the user choose 90 or forever, protect anything unfinished, and add no size budget. The review recommended a threshold; deciding what a threshold may and may not delete — and that an irreversible deletion should err generous and be disclosed in the UI rather than happen silently — is a product call.
+
+### Verification after AI work
+
+I did not accept the agents' reports as evidence:
+
+- **The suite.** Re-measured from the working tree, not quoted: 195 `@Test` + 41 `func test` = 236 declarations, and the recorded green run reports the same 195 and 41 at runtime, ending `** TEST SUCCEEDED **`. The reorganization shows up as 31 tracked renames in `git status`, and it was checked by comparing the declaration count before and after the move — an unchanged total is what rules out a silently dropped file, which a green run alone would not.
+- **The retention behaviour.** Verified by hand end to end on a purpose-created simulator, not inferred from the unit tests: a session finalized through the UI, aged 31 days in the store, then pruned on the next launch — `photosPrunedAt` stamped, the photo column shrunk, the bill snapshot byte-identical by `shasum`, the aged draft untouched, the state still correct after a second relaunch. The full record, including both shortcuts and both gaps, is in `docs/manual-verification.md` (§ 2026-08-16 Photo Retention).
+- **The claims in these documents.** Every file:line citation added to `docs/architecture.md` and to the retention verification section was re-read in the working tree at the time of writing, the retention wording in `README.md` was checked against the landed policy rather than the plan for it, and the `git show d5794d6:README.md` output above was re-run rather than remembered.
+- **What is still not proven.** The pruned-photos alert body was never displayed on screen; no on-disk byte reclamation was measured, because the demo photo data is small enough that SwiftData keeps it inline; the 90-day and keep-forever windows and the two failure paths are covered only by unit tests; and the physical-device work outstanding since Sprint 3 is unchanged. None of this is represented as passed.

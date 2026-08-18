@@ -45,6 +45,7 @@ struct MenuView: View {
     @State private var photoSearchSelection: MenuItemPhotoSelection?
     @State private var showBill = false
     @State private var showHistoryPhotos = false
+    @State private var showPrunedNotice = false
 
     /// Creates the production menu screen and defers creation of the live FX
     /// service until Bill actually needs it.
@@ -137,6 +138,16 @@ struct MenuView: View {
                             Label("菜單相片", systemImage: "photo.stack")
                         }
                     }
+                } else if session.photosPrunedAt != nil {
+                    /// Distinguishes "photos were pruned by the retention policy"
+                    /// from "this session never had photos".
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showPrunedNotice = true
+                        } label: {
+                            Label("菜單相片", systemImage: "photo.badge.exclamationmark")
+                        }
+                    }
                 }
             }
             .toolbarBackground(Color.mtBackground, for: .navigationBar)
@@ -163,6 +174,11 @@ struct MenuView: View {
             }
             .sheet(isPresented: $showHistoryPhotos) {
                 HistoryPhotoGalleryView(photos: session.photos)
+            }
+            .alert("菜單相片已自動清理", isPresented: $showPrunedNotice) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text("原始菜單相片已按「保留期限」設定自動清理，帳單同菜式紀錄冇受影響。")
             }
             #if DEBUG
             .task {

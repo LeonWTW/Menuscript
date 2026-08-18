@@ -7,12 +7,9 @@ import Testing
 @Suite("Privacy manifest")
 /// Protects the no-tracking promise, declared data categories, and UserDefaults justification.
 struct PrivacyManifestTests {
-    /// Locates the production privacy manifest relative to this test file, independent of the working directory.
+    /// Locates the production privacy manifest through the shared repo-root marker, independent of this file's location.
     private var manifestURL: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Menuscript/Resources/PrivacyInfo.xcprivacy")
+        RepoPaths.root.appendingPathComponent("Menuscript/Resources/PrivacyInfo.xcprivacy")
     }
 
     /// Parses the manifest into a dictionary so each declared privacy field can be checked exactly.

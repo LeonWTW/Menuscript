@@ -57,6 +57,10 @@ final class MenuSession {
     /// Stores the permanent completed bill as encoded data. It is optional so
     /// older sessions still open, and only finalization should write it.
     var billSnapshotData: Data?
+    /// When the retention policy removed this session's original photos, letting
+    /// screens distinguish "pruned" from "never had photos". It stays optional so
+    /// older saved sessions still open, and only pruning writes it.
+    var photosPrunedAt: Date?
 
     @Relationship(deleteRule: .cascade, inverse: \MenuItem.session)
     var items: [MenuItem]
@@ -147,6 +151,7 @@ final class MenuSession {
         allergenProfile: [String] = [],
         lifecycleStatusRaw: String? = "draft",
         billSnapshotData: Data? = nil,
+        photosPrunedAt: Date? = nil,
         items: [MenuItem] = []
     ) {
         self.id = id
@@ -168,6 +173,7 @@ final class MenuSession {
         self.allergenProfile = allergenProfile
         self.lifecycleStatusRaw = lifecycleStatusRaw
         self.billSnapshotData = billSnapshotData
+        self.photosPrunedAt = photosPrunedAt
         self.items = items
     }
 }

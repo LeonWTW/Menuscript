@@ -24,17 +24,9 @@ struct StringCatalogTests {
         "Menuscript/Resources/InfoPlist.xcstrings",
     ]
 
-    /// Locates the repository from this source file instead of assuming tests run in a particular directory.
-    private static func repoRoot() -> URL {
-        // #filePath = <repo>/MenuscriptTests/LocalizationTests.swift
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-    }
-
     /// Loads one Xcode string catalog as JSON for structural and translation checks.
     private func loadCatalog(_ relativePath: String) throws -> [String: Any] {
-        let url = Self.repoRoot().appendingPathComponent(relativePath)
+        let url = RepoPaths.root.appendingPathComponent(relativePath)
         let data = try Data(contentsOf: url)
         let json = try JSONSerialization.jsonObject(with: data)
         return try #require(json as? [String: Any], "\(relativePath) is not a JSON object")

@@ -292,9 +292,7 @@ struct SessionStoreTests {
     /// snapshot error branch, preventing untranslated technical messages in the UI.
     @Test("Persistence error descriptions route every branch through localization")
     func persistenceErrorsUseL10nContract() throws {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let repoRoot = RepoPaths.root
         let contracts: [(path: String, calls: [String])] = [
             (
                 "Menuscript/Services/SessionStore.swift",

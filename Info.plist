@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  This file supplies the app identity, version, launch behavior, supported orientation, and the
+  plain-language privacy messages iOS shows before allowing camera or photo-library access.
+  XcodeGen reads it when creating the application target so these values stay outside generated files.
+-->
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>

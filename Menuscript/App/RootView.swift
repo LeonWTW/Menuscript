@@ -45,6 +45,7 @@ struct RootView: View {
             .navigationDestination(for: MenuSession.self) { session in
                 MenuView(session: session) {
                     navigationPath.removeAll()
+                    pruneExpiredPhotos()
                 }
             }
             .toolbar {
@@ -110,6 +111,7 @@ struct RootView: View {
             Text(persistenceErrorMessage ?? "")
         }
         .task {
+            pruneExpiredPhotos()
             await runAutoDemoIfNeeded()
         }
     }
@@ -176,6 +178,18 @@ struct RootView: View {
         }
         do {
             try SessionStore(context: modelContext).delete(sessionsToDelete)
+        } catch {
+            persistenceErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Applies the photo-retention setting. Runs off the user's critical path
+    /// (launch and post-finalize); a failure keeps every photo and is surfaced
+    /// through the shared persistence alert instead of being swallowed.
+    private func pruneExpiredPhotos() {
+        do {
+            try PhotoRetentionService(context: modelContext)
+                .pruneExpiredPhotos(policy: PhotoRetentionPolicy.resolve())
         } catch {
             persistenceErrorMessage = error.localizedDescription
         }
